@@ -1,16 +1,27 @@
-// UnmuteButton — lets the user speak directly on the call.
-// When pressed: cancels any playing TTS instantly (barge-in), captures user speech,
-// captions it into the transcript as { side: "us", source: "user-voice" }.
-// The LLM treats it as already-said; it never repeats the user's words.
-// All audio goes through AudioTransport — this component NEVER touches the mic directly.
-// TODO: step 5 — wire barge-in cancel + mic capture via AudioTransport
-export default function UnmuteButton() {
+"use client";
+
+import { t } from "@/lib/i18n";
+
+export default function UnmuteButton({
+  unmuted,
+  onToggle,
+}: {
+  unmuted: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
-      className="rounded-full bg-blue-600 text-white px-6 py-3 text-sm font-semibold"
-      aria-label="Unmute and speak"
+      type="button"
+      onClick={onToggle}
+      className={`min-h-14 min-w-28 rounded-2xl border px-5 text-base font-semibold ${
+        unmuted
+          ? "border-red-700 bg-red-700 text-white"
+          : "border-[var(--setu-line)] bg-[var(--setu-card)] text-[var(--setu-ink)]"
+      }`}
+      aria-pressed={unmuted}
+      aria-label={unmuted ? t("call.mute") : t("call.unmute")}
     >
-      Unmute
+      {unmuted ? t("call.mute") : t("call.unmute")}
     </button>
   );
 }

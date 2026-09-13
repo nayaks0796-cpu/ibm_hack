@@ -1,3 +1,69 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --setu-paper: #f4efe4;
+  --setu-ink: #14181f;
+  --setu-muted: #5c6573;
+  --setu-card: #fffdf8;
+  --setu-line: #d8d0c2;
+  --setu-forest: #0c4a3e;
+  --setu-forest-ink: #06281f;
+  --setu-clay: #9a3412;
+  --setu-clerk: #1e3a5f;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--setu-paper);
+  color: var(--setu-ink);
+  font-family: system-ui, "Segoe UI", "Noto Sans Devanagari", sans-serif;
+}
+
+::selection {
+  background: #c5e4d8;
+  color: var(--setu-ink);
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: 3px solid #0c4a3e;
+  outline-offset: 3px;
+}
+
+@keyframes setu-pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.setu-ring-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  animation: setu-pulse-ring 1.6s ease-out infinite;
+}
