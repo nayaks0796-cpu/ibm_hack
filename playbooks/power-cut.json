@@ -1,0 +1,15 @@
+{
+  "id": "power-cut",
+  "icon": "zap",
+  "title": { "en": "Power cut", "hi": "बिजली गुल" },
+  "goal": {
+    "en": "Get a complaint number for the power cut",
+    "hi": "बिजली कटौती की शिकायत संख्या प्राप्त करें"
+  },
+  "defaultCallLanguage": "hi",
+  "facts": [
+    { "key": "consumer_number", "label": { "en": "Consumer number", "hi": "उपभोक्ता क्रमांक" }, "required": true },
+    { "key": "area", "label": { "en": "Area / colony", "hi": "क्षेत्र / कॉलोनी" }, "required": true },
+    { "key": "since_when", "label": { "en": "Since when", "hi": "कब से" }, "required": false }
+  ]
+}
