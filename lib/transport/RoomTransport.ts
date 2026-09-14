@@ -1,5 +1,5 @@
 // RoomTransport — demo transport using browser mic/speaker.
-// Skeleton: speechSynthesis for speak(); inbound audio is step 5.
+// Speak goes through /api/tts first, then browser speechSynthesis.
 import type { AudioTransport } from "./AudioTransport";
 
 type LineState = "active" | "silent" | "disconnected";
@@ -7,6 +7,9 @@ type LineState = "active" | "silent" | "disconnected";
 export class RoomTransport implements AudioTransport {
   private lineState: LineState = "disconnected";
   private listeners = new Set<(state: LineState) => void>();
+  private audio: HTMLAudioElement | null = null;
+  private objectUrl: string | null = null;
+  lastSpeakSource: "eleven" | "demo" = "demo";
 
   async startInbound(): Promise<void> {
     this.setLineState("active");
@@ -19,14 +22,32 @@ export class RoomTransport implements AudioTransport {
 
   async speak(text: string, lang: "hi" | "en"): Promise<() => void> {
     this.cancelSpeech();
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      return () => {};
-    }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang === "hi" ? "hi-IN" : "en-IN";
-    utterance.rate = 0.95;
-    window.speechSynthesis.speak(utterance);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, lang }),
+      });
+      if (!res.ok || !res.body) {
+        throw new Error("tts unavailable");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      this.audio = audio;
+      this.objectUrl = url;
+      this.lastSpeakSource = "eleven";
+      await audio.play();
+    } catch {
+      this.lastSpeakSource = "demo";
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang === "hi" ? "hi-IN" : "en-IN";
+        utterance.rate = 0.95;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
 
     return () => this.cancelSpeech();
   }
@@ -46,6 +67,15 @@ export class RoomTransport implements AudioTransport {
   private cancelSpeech(): void {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.src = "";
+      this.audio = null;
+    }
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
     }
   }
 

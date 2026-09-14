@@ -1,6 +1,7 @@
 // localStorage / IndexedDB helpers for Setu.
 // All user data lives on-device. No accounts, no server-side database.
 
+import { redact } from "../guard/redact";
 import type {
   CallSession,
   Outcome,
@@ -87,7 +88,12 @@ export function clearCallSession(): void {
 
 export function appendTranscriptEntry(entry: TranscriptEntry): void {
   const entries = loadCurrentTranscript();
-  entries.push(entry);
+  const text = redact(entry.text);
+  entries.push({
+    ...entry,
+    text,
+    redacted: text !== entry.text || entry.redacted,
+  });
   sessionStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(entries));
 }
 

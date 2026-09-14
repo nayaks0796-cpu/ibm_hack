@@ -18,14 +18,73 @@ export function disclosureSuggestion(
 
 export function contextualSuggestions(
   facts: Record<string, string>,
-  callLanguage: CallLanguage
+  callLanguage: CallLanguage,
+  playbookId = "power-cut"
 ): ReplySuggestion[] {
+  const give = (hi: string, en: string) =>
+    callLanguage === "hi" ? hi : en;
+
+  if (playbookId === "bank") {
+    const bank = facts.bank_name?.trim() ?? "";
+    const account = facts.account_or_card?.trim() ?? "";
+    return [
+      {
+        id: "s-bank",
+        label: t("call.suggest.bank_name"),
+        sentence: bank
+          ? give(`मेरा बैंक ${bank} है।`, `My bank is ${bank}.`)
+          : missingFactSentence(callLanguage),
+      },
+      {
+        id: "s-account",
+        label: t("call.suggest.account"),
+        sentence: account
+          ? give(`मेरा खाता या कार्ड क्रमांक ${account} है।`, `My account or card number is ${account}.`)
+          : missingFactSentence(callLanguage),
+      },
+      {
+        id: "s-ask-number",
+        label: t("call.suggest.ask_complaint"),
+        sentence: give(
+          "कृपया शिकायत या संदर्भ संख्या बताइए।",
+          "Please give the complaint or reference number."
+        ),
+      },
+    ];
+  }
+
+  if (playbookId === "hospital") {
+    const hospital = facts.hospital_name?.trim() ?? "";
+    const patient = facts.patient_name?.trim() ?? "";
+    return [
+      {
+        id: "s-hospital",
+        label: t("call.suggest.hospital_name"),
+        sentence: hospital
+          ? give(`यह ${hospital} के लिए है।`, `This is for ${hospital}.`)
+          : missingFactSentence(callLanguage),
+      },
+      {
+        id: "s-patient",
+        label: t("call.suggest.patient_name"),
+        sentence: patient
+          ? give(`मरीज का नाम ${patient} है।`, `The patient's name is ${patient}.`)
+          : missingFactSentence(callLanguage),
+      },
+      {
+        id: "s-ask-number",
+        label: t("call.suggest.ask_complaint"),
+        sentence: give(
+          "कृपया पंजीकरण या संदर्भ संख्या बताइए।",
+          "Please give the registration or reference number."
+        ),
+      },
+    ];
+  }
+
   const consumer = facts.consumer_number?.trim() ?? "";
   const area = facts.area?.trim() ?? "";
   const since = facts.since_when?.trim() ?? "";
-
-  const give = (hi: string, en: string) =>
-    callLanguage === "hi" ? hi : en;
 
   const items: ReplySuggestion[] = [
     {

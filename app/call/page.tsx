@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import CaptionFeed from "@/components/CaptionFeed";
 import DTMFPad from "@/components/DTMFPad";
 import ISLAvatar from "@/components/ISLAvatar";
+import NumberCapturedBanner from "@/components/NumberCapturedBanner";
 import ReplySuggestions from "@/components/ReplySuggestions";
 import SilenceRing, { type RingState } from "@/components/SilenceRing";
 import UnmuteButton from "@/components/UnmuteButton";
@@ -54,8 +55,14 @@ export default function CallPage() {
   const [unmuted, setUnmuted] = useState(false);
   const [name, setName] = useState("");
   const [facts, setFacts] = useState<Record<string, string>>({});
+  const [uiLanguage, setUiLanguage] = useState("en");
   const [callLanguage, setCallLanguage] = useState<"hi" | "en">("hi");
+  const [playbookId, setPlaybookId] = useState("power-cut");
   const [playbookName, setPlaybookName] = useState("Power cut");
+  const [playbookGoal, setPlaybookGoal] = useState("");
+  const [llmSuggestions, setLlmSuggestions] = useState<ReplySuggestion[]>([]);
+  const [gloss, setGloss] = useState<string[]>([]);
+  const [demoVoice, setDemoVoice] = useState(true);
 
   if (!transportRef.current) {
     transportRef.current = new RoomTransport();
@@ -72,9 +79,12 @@ export default function CallPage() {
     const playbook = getPlaybook(session.playbookId);
     setName(profile.name);
     setFacts(loadFacts());
+    setUiLanguage(profile.uiLanguage);
     setCallLanguage(session.callLanguage);
     setShowIsl(profile.islAvatar);
+    setPlaybookId(session.playbookId);
     setPlaybookName(playbook ? playbookTitle(playbook) : session.playbookId);
+    setPlaybookGoal(playbook?.goal.en ?? "");
     setEntries(loadCurrentTranscript());
     setSelected(disclosureSuggestion(profile.name, session.callLanguage));
     setReady(true);
@@ -91,13 +101,15 @@ export default function CallPage() {
     };
   }, [router]);
 
-  const contextual = useMemo(
+  const fallbackContextual = useMemo(
     () => [
       disclosureSuggestion(name, callLanguage),
-      ...contextualSuggestions(facts, callLanguage),
+      ...contextualSuggestions(facts, callLanguage, playbookId),
     ],
-    [name, facts, callLanguage]
+    [name, facts, callLanguage, playbookId]
   );
+  const contextual =
+    llmSuggestions.length > 0 ? llmSuggestions : fallbackContextual;
   const alwaysPresent = useMemo(
     () => alwaysPresentSuggestions(callLanguage),
     [callLanguage]
@@ -131,6 +143,42 @@ export default function CallPage() {
 
     const found = detectReferenceNumbers(text);
     if (found[0]) setHeardRef(found[0]);
+
+    const history = loadCurrentTranscript();
+    void fetch("/api/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        caption: text,
+        history: history.slice(-6),
+        facts,
+        goal: playbookGoal,
+        callLanguage,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data: { suggestions?: ReplySuggestion[] }) => {
+        const next = (data.suggestions ?? []).filter(
+          (item) => !item.id.startsWith("ap-") && !item.id.startsWith("always-")
+        );
+        if (next.length > 0) setLlmSuggestions(next);
+      })
+      .catch(() => {
+        // Keep hardcoded reply suggestions if watsonx is offline.
+      });
+
+    void fetch("/api/gloss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then((res) => res.json())
+      .then((data: { gloss?: string[] }) => {
+        if (data.gloss?.length) setGloss(data.gloss);
+      })
+      .catch(() => {
+        // Keep the last gloss if the avatar endpoint is offline.
+      });
   }
 
   async function handleSend() {
@@ -157,6 +205,7 @@ export default function CallPage() {
         callLanguage
       );
       cancelSpeakRef.current = cancel ?? null;
+      setDemoVoice(transportRef.current?.lastSpeakSource !== "eleven");
     } catch {
       cancelSpeakRef.current = null;
     }
@@ -179,10 +228,11 @@ export default function CallPage() {
     });
   }
 
-  function pinHeard() {
+  function pinHeard(ref?: string) {
     const session = loadCallSession();
-    if (!session || !heardRef) return;
-    saveCallSession({ ...session, pinnedReferenceNumber: heardRef });
+    const value = ref ?? heardRef;
+    if (!session || !value) return;
+    saveCallSession({ ...session, pinnedReferenceNumber: value });
     setHeardRef(null);
   }
 
@@ -222,9 +272,11 @@ export default function CallPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-highlight/20 px-3 py-1 text-xs font-semibold text-highlight-ink">
-            {t("call.demo_voice")}
-          </span>
+          {demoVoice ? (
+            <span className="rounded-full bg-highlight/20 px-3 py-1 text-xs font-semibold text-highlight-ink">
+              {t("call.demo_voice")}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={endCall}
@@ -236,22 +288,13 @@ export default function CallPage() {
       </header>
 
       {heardRef ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ink px-4 py-3 text-paper animate-fade-up">
-          <p className="text-base font-semibold">
-            {t("call.pin_prompt", { ref: heardRef })}
-          </p>
-          <div className="flex gap-2">
-            <button type="button" onClick={pinHeard} className="gold-btn min-h-11">
-              {t("call.pin_yes")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setHeardRef(null)}
-              className="min-h-11 rounded-full border border-white/25 px-4 text-sm font-semibold"
-            >
-              {t("call.pin_no")}
-            </button>
-          </div>
+        <div className="mt-4">
+          <NumberCapturedBanner
+            referenceNumber={heardRef}
+            onConfirmPin={pinHeard}
+            onDismiss={() => setHeardRef(null)}
+            lang={uiLanguage}
+          />
         </div>
       ) : null}
 
@@ -265,7 +308,7 @@ export default function CallPage() {
           >
             {showIsl ? t("call.isl_hide") : t("call.isl_show")}
           </button>
-          <ISLAvatar visible={showIsl} />
+          <ISLAvatar visible={showIsl} gloss={gloss} />
         </div>
       </section>
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
 import { t } from "@/lib/i18n";
-import { POWER_CUT } from "@/lib/playbooks";
+import { PLAYBOOKS, playbookGoal, playbookTitle } from "@/lib/playbooks";
 import {
   clearCurrentTranscript,
   loadFacts,
@@ -13,6 +13,7 @@ import {
   saveCallSession,
   saveFacts,
 } from "@/lib/store";
+import type { Playbook } from "@/lib/types";
 
 export default function StartPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function StartPage() {
   const [facts, setFacts] = useState<Record<string, string>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [playbookId, setPlaybookId] = useState("power-cut");
 
   useEffect(() => {
     const profile = loadProfile();
@@ -32,6 +34,9 @@ export default function StartPage() {
     setFacts(loadFacts());
     setReady(true);
   }, [router]);
+
+  const playbook: Playbook =
+    PLAYBOOKS.find((item) => item.id === playbookId) ?? PLAYBOOKS[0];
 
   function beginEdit(key: string) {
     setEditingKey(key);
@@ -50,7 +55,7 @@ export default function StartPage() {
     const profile = loadProfile();
     clearCurrentTranscript();
     saveCallSession({
-      playbookId: POWER_CUT.id,
+      playbookId: playbook.id,
       startedAt: Date.now(),
       callLanguage: profile.callLanguage,
       pinnedReferenceNumber: null,
@@ -79,26 +84,28 @@ export default function StartPage() {
           {t("start.choose_situation")}
         </p>
 
-        <div className="mt-10 space-y-3">
-          <button
-            type="button"
-            className="choice choice-on w-full p-6 text-left"
-          >
-            <span className="block font-serif text-3xl">{t("start.power_cut")}</span>
-            <span className="mt-2 block text-base font-normal text-[var(--muted)]">
-              {POWER_CUT.goal.en}
-            </span>
-          </button>
-          <div className="grid grid-cols-2 gap-3">
-            <DisabledCard title={t("start.bank_1930")} />
-            <DisabledCard title={t("start.hospital")} />
-          </div>
+        <div className="mt-10 grid gap-3 sm:grid-cols-3">
+          {PLAYBOOKS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPlaybookId(item.id)}
+              className={`choice h-full p-5 text-left ${
+                playbookId === item.id ? "choice-on" : ""
+              }`}
+            >
+              <span className="block font-serif text-2xl">{playbookTitle(item)}</span>
+              <span className="mt-2 block text-sm font-normal text-[var(--muted)]">
+                {playbookGoal(item)}
+              </span>
+            </button>
+          ))}
         </div>
 
         <section className="mt-10">
           <h2 className="eyebrow">{t("start.confirm_facts")}</h2>
           <div className="mt-4 flex flex-col gap-2">
-            {POWER_CUT.facts.map((fact) => {
+            {playbook.facts.map((fact) => {
               const value = facts[fact.key] ?? "";
               const label = fact.label.en ?? fact.key;
               if (editingKey === fact.key) {
@@ -143,13 +150,5 @@ export default function StartPage() {
         </div>
       </main>
     </AppChrome>
-  );
-}
-
-function DisabledCard({ title }: { title: string }) {
-  return (
-    <div aria-disabled="true" className="choice opacity-45">
-      <p className="font-serif text-xl">{title}</p>
-    </div>
   );
 }

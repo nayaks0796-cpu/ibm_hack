@@ -1,9 +1,32 @@
 import en from "@/messages/en.json";
+import hi from "@/messages/hi.json";
+import ta from "@/messages/ta.json";
+import te from "@/messages/te.json";
+import kn from "@/messages/kn.json";
+import ml from "@/messages/ml.json";
+import mr from "@/messages/mr.json";
+import bn from "@/messages/bn.json";
 
-type MessageKey = keyof typeof en;
+export type MessageKey = keyof typeof en;
 
-export function t(key: MessageKey, vars?: Record<string, string>): string {
-  const template: string = en[key];
+const dictionaries: Record<string, Record<string, string>> = {
+  en,
+  hi,
+  ta,
+  te,
+  kn,
+  ml,
+  mr,
+  bn,
+};
+
+export function t(
+  key: MessageKey,
+  vars?: Record<string, string>,
+  lang = "en"
+): string {
+  const dict = dictionaries[lang] ?? en;
+  let template = dict[key] ?? en[key] ?? key;
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (_, name: string) => vars[name] ?? "");
 }

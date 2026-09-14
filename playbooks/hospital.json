@@ -1,0 +1,39 @@
+{
+  "id": "hospital",
+  "icon": "hospital",
+  "title": {
+    "en": "Hospital",
+    "hi": "अस्पताल"
+  },
+  "goal": {
+    "en": "Book an urgent medical appointment or emergency bed inquiry",
+    "hi": "अति आवश्यक चिकित्सा अपॉइंटमेंट या आपातकालीन पूछताछ करें"
+  },
+  "defaultCallLanguage": "hi",
+  "facts": [
+    {
+      "key": "hospital_name",
+      "label": {
+        "en": "Hospital name",
+        "hi": "अस्पताल का नाम"
+      },
+      "required": true
+    },
+    {
+      "key": "patient_name",
+      "label": {
+        "en": "Patient name",
+        "hi": "मरीज का नाम"
+      },
+      "required": true
+    },
+    {
+      "key": "department",
+      "label": {
+        "en": "Department / Specialist",
+        "hi": "विभाग / विशेषज्ञ"
+      },
+      "required": false
+    }
+  ]
+}

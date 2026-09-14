@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
 import OutcomeCard from "@/components/OutcomeCard";
+import RefusedOutcomeBanner from "@/components/RefusedOutcomeBanner";
 import { t } from "@/lib/i18n";
 import { getPlaybook, playbookTitle } from "@/lib/playbooks";
 import { clearCallSession, loadLastOutcome } from "@/lib/store";
@@ -41,6 +42,11 @@ export default function OutcomePage() {
 
         {outcome ? (
           <div className="mt-10 w-full animate-fade-up [animation-delay:80ms]">
+            {outcome.result === "refused" ? (
+              <div className="mb-4">
+                <RefusedOutcomeBanner />
+              </div>
+            ) : null}
             <OutcomeCard outcome={outcome} playbookTitle={title} />
           </div>
         ) : (

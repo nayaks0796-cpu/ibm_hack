@@ -1,0 +1,39 @@
+{
+  "id": "bank",
+  "icon": "shield-alert",
+  "title": {
+    "en": "Bank / Cyber 1930",
+    "hi": "बैंक / साइबर 1930"
+  },
+  "goal": {
+    "en": "Report unauthorized transaction or block card",
+    "hi": "अनधिकृत लेनदेन की रिपोर्ट करें या कार्ड ब्लॉक करें"
+  },
+  "defaultCallLanguage": "hi",
+  "facts": [
+    {
+      "key": "bank_name",
+      "label": {
+        "en": "Bank name",
+        "hi": "बैंक का नाम"
+      },
+      "required": true
+    },
+    {
+      "key": "account_or_card",
+      "label": {
+        "en": "Account / Card number",
+        "hi": "खाता / कार्ड नंबर"
+      },
+      "required": true
+    },
+    {
+      "key": "incident_time",
+      "label": {
+        "en": "Incident time",
+        "hi": "घटना का समय"
+      },
+      "required": false
+    }
+  ]
+}
