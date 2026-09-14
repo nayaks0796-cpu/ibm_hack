@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
-import { bootCwasa, glossToSigml, playSigml } from "@/lib/isl/cwasa";
+import {
+  attachCwasaHost,
+  avatarCanvasReady,
+  bootCwasa,
+  detachCwasaHost,
+  glossToSigml,
+  playSigml,
+} from "@/lib/isl/cwasa";
 
 interface Props {
   gloss?: string[];
@@ -10,28 +17,40 @@ interface Props {
 }
 
 export default function ISLAvatar({ gloss = [], visible = true }: Props) {
+  const slotRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [playing, setPlaying] = useState("HELLO");
 
   useEffect(() => {
     if (!visible) return;
+    const slot = slotRef.current;
+    if (!slot) return;
 
     let cancelled = false;
+    const host = attachCwasaHost(slot);
+
+    const markReady = () => {
+      if (!cancelled) setStatus("ready");
+    };
+
+    const observer = new MutationObserver(() => {
+      if (avatarCanvasReady()) markReady();
+    });
+    observer.observe(host, { childList: true, subtree: true });
+    if (avatarCanvasReady()) markReady();
+
     void bootCwasa()
-      .then(() => {
-        if (!cancelled) setStatus("ready");
-      })
+      .then(markReady)
       .catch(() => {
         if (cancelled) return;
-        if (document.querySelector(".CWASAAvatar.av0 canvas")) {
-          setStatus("ready");
-          return;
-        }
-        setStatus("error");
+        if (avatarCanvasReady()) markReady();
+        else setStatus("error");
       });
 
     return () => {
       cancelled = true;
+      observer.disconnect();
+      detachCwasaHost(slot);
     };
   }, [visible]);
 
@@ -39,7 +58,9 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     if (status !== "ready" || gloss.length === 0) return;
     const label = gloss.join(" ");
     setPlaying(label);
-    void glossToSigml(gloss).then(playSigml);
+    void glossToSigml(gloss)
+      .then((sigml) => playSigml(sigml))
+      .catch(() => undefined);
   }, [gloss, status]);
 
   return (
@@ -48,7 +69,7 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
         visible ? "" : "hidden"
       }`}
     >
-      <div className="CWASAAvatar av0 h-full w-full" />
+      <div ref={slotRef} className="h-full w-full" />
 
       {status === "loading" ? (
         <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">

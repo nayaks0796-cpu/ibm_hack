@@ -9,7 +9,8 @@ import { alignGlossToCatalog } from "./mapGloss";
 declare global {
   interface Window {
     CWASA?: {
-      init: (cfg?: Record<string, unknown>) => void;
+      init: (cfg?: Record<string, unknown>) => Promise<void> | void;
+      ready?: Promise<void>;
       playSiGMLURL: (url: string, av?: number) => string;
       playSiGMLText: (text: string, av?: number) => string;
       stopSiGML: (av?: number) => string;
@@ -17,13 +18,56 @@ declare global {
   }
 }
 
-/** UEA JASigning assets (avatar JARs). CORS is open (*). */
-const JAS_BASE = "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2026z/";
+/** Same-origin proxy so avatar JARs and shaders are not blocked by CORS. */
+const JAS_BASE = "/api/jas/";
+const HOST_ID = "sampark-cwasa-host";
 
 let bootPromise: Promise<void> | null = null;
 
 export function loadSignIndex(): Promise<Map<string, string>> {
   return Promise.resolve(getSignIndex());
+}
+
+/** Keep the CWASA node outside React so Strict Mode remounts cannot destroy WebGL. */
+export function ensureCwasaHost(): HTMLElement {
+  let host = document.getElementById(HOST_ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = HOST_ID;
+    host.className = "CWASAAvatar av0";
+    host.style.width = "100%";
+    host.style.height = "100%";
+    document.body.appendChild(host);
+  }
+  return host;
+}
+
+function parkCwasaHost(): void {
+  const host = document.getElementById(HOST_ID);
+  if (!host) return;
+  host.style.position = "fixed";
+  host.style.left = "-9999px";
+  host.style.top = "0";
+  host.style.width = "320px";
+  host.style.height = "280px";
+  document.body.appendChild(host);
+}
+
+export function attachCwasaHost(slot: HTMLElement): HTMLElement {
+  const host = ensureCwasaHost();
+  host.style.position = "relative";
+  host.style.left = "0";
+  host.style.top = "0";
+  host.style.width = "100%";
+  host.style.height = "100%";
+  host.style.display = "block";
+  slot.appendChild(host);
+  return host;
+}
+
+export function detachCwasaHost(slot: HTMLElement): void {
+  const host = document.getElementById(HOST_ID);
+  if (host && host.parentNode === slot) parkCwasaHost();
 }
 
 function loadCss(): void {
@@ -43,21 +87,24 @@ function loadScript(): Promise<void> {
   if (window.CWASA) return Promise.resolve();
 
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-cwasa="1"]');
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-cwasa="1"]'
+    );
     if (existing) {
       if (window.CWASA) {
         resolve();
         return;
       }
       existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("CWASA script failed")), {
-        once: true,
-      });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("CWASA script failed")),
+        { once: true }
+      );
       return;
     }
 
     const script = document.createElement("script");
-    // vhg2026z allcsa.js includes client-side Animgen (no UEA CGI needed).
     script.src = "/isl/js/allcsa.js";
     script.async = true;
     script.dataset.cwasa = "1";
@@ -92,21 +139,25 @@ function waitFor(selector: string, timeoutMs: number): Promise<Element> {
   });
 }
 
+export function avatarCanvasReady(): boolean {
+  return Boolean(document.querySelector("#sampark-cwasa-host canvas, .CWASAAvatar.av0 canvas"));
+}
+
 export function bootCwasa(): Promise<void> {
   if (bootPromise) return bootPromise;
 
   bootPromise = (async () => {
+    ensureCwasaHost();
     loadCss();
     await Promise.all([loadScript(), loadSignIndex()]);
     if (!window.CWASA) throw new Error("CWASA missing after script load");
 
     await waitFor(".CWASAAvatar.av0", 4000);
 
-    // Omit animgenServer so vhg2026z uses built-in client Animgen.
-    // (UEA's animgenserver.pl currently returns 500.)
-    if (!document.querySelector(".CWASAAvatar.av0 canvas")) {
-      window.CWASA.init({
+    if (!avatarCanvasReady()) {
+      const ready = window.CWASA.init({
         jasBase: JAS_BASE,
+        useCwaConfig: true,
         avSettings: {
           width: 320,
           height: 280,
@@ -114,21 +165,19 @@ export function bootCwasa(): Promise<void> {
           initAv: "anna",
           background: "#171716",
           initSiGMLURL: "",
-          allowSiGMLText: false,
+          allowSiGMLText: true,
           allowFrameSteps: false,
           ambIdle: true,
         },
       });
+      if (ready && typeof (ready as Promise<void>).then === "function") {
+        await ready;
+      }
+    } else if (window.CWASA.ready) {
+      await window.CWASA.ready;
     }
 
-    await waitFor(".CWASAAvatar.av0 canvas", 20000);
-    // Give the avatar mesh a moment to finish loading before the boot sign.
-    await new Promise((r) => window.setTimeout(r, 600));
-    try {
-      playSigml(await glossToSigml(["hello"]));
-    } catch {
-      // Avatar is up even if the test sentence cannot play yet.
-    }
+    await waitFor(".CWASAAvatar.av0 canvas", 45000);
   })().catch((error) => {
     bootPromise = null;
     throw error;
@@ -173,7 +222,10 @@ export async function glossToSigml(gloss: string[]): Promise<string> {
 
 export function playSigml(sigml: string): void {
   if (!window.CWASA || !/<hns_sign|<hamnosys/i.test(sigml)) return;
-  window.CWASA.stopSiGML(0);
-  // vhg2026z: (text, av?) — not the old (av, text) order.
-  window.CWASA.playSiGMLText(sigml, 0);
+  try {
+    window.CWASA.stopSiGML(0);
+    window.CWASA.playSiGMLText(sigml, 0);
+  } catch {
+    // Animgen throws if the avatar JAR is still loading; gloss still shows.
+  }
 }

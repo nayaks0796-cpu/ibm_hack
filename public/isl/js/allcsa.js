@@ -49048,8 +49048,8 @@ static SiGMLToCAS(sigml, av, gui, fps, speedFun, H2G, CB, drainFun) {
 if (typeof lggr.info === "function") {
 lggr.info(`SiGMLToCAS: Started for ${av} panel ${gui} FPS ${fps}`);
 }
-AGI.Ready.then(() => {});
-(AGI.PrepInstance(av, gui)).then((theAGI) => {
+AGI.Ready.then(() => {
+return (AGI.PrepInstance(av, gui)).then((theAGI) => {
 var genFrames, gloss, i, len, nd, nn, okSigns, procHtoGSiGML, ref, ref1, sigDoc;
 this.startTime = Date.now();
 this.totFrames = 0;
@@ -49243,6 +49243,7 @@ lggr.debug(`SiGMLToCAS: PrepInstance failed: ${msg}`);
 return CB({
 type: AGI.CB.Fail,
 err: `Cannot process SiGML for ${av}`
+});
 });
 });
 return void 0;
