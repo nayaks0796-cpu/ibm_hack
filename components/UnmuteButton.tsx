@@ -13,10 +13,10 @@ export default function UnmuteButton({
     <button
       type="button"
       onClick={onToggle}
-      className={`min-h-14 min-w-28 rounded-2xl border px-5 text-base font-semibold ${
+      className={`min-h-16 min-w-28 rounded-full px-5 text-base font-semibold transition-all duration-200 ${
         unmuted
-          ? "border-red-700 bg-red-700 text-white"
-          : "border-[var(--setu-line)] bg-[var(--setu-card)] text-[var(--setu-ink)]"
+          ? "bg-danger text-white"
+          : "border border-[var(--border)] bg-raised text-ink hover:-translate-y-0.5"
       }`}
       aria-pressed={unmuted}
       aria-label={unmuted ? t("call.mute") : t("call.unmute")}

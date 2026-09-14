@@ -208,27 +208,27 @@ export default function CallPage() {
   }
 
   if (!ready) {
-    return <main className="min-h-screen" />;
+    return <main className="min-h-screen bg-paper" />;
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-4">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-5 sm:px-6">
+      <header className="flex items-center justify-between gap-3 animate-fade-up">
+        <div className="flex items-center gap-3">
           <SilenceRing state={lineState} />
           <div>
             <p className="text-sm font-semibold">{t(LINE_LABEL[lineState])}</p>
-            <p className="text-xs text-[var(--setu-muted)]">{playbookName}</p>
+            <p className="text-xs text-[var(--muted)]">{playbookName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-[#efe4c8] px-3 py-1 text-xs font-semibold text-[var(--setu-clay)]">
+          <span className="rounded-full bg-highlight/20 px-3 py-1 text-xs font-semibold text-highlight-ink">
             {t("call.demo_voice")}
           </span>
           <button
             type="button"
             onClick={endCall}
-            className="min-h-12 rounded-2xl bg-[#8b1e1e] px-4 text-sm font-bold text-white"
+            className="min-h-11 rounded-full bg-danger px-4 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
           >
             {t("call.end")}
           </button>
@@ -236,22 +236,18 @@ export default function CallPage() {
       </header>
 
       {heardRef ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#1e3a5f] px-4 py-3 text-white">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ink px-4 py-3 text-paper animate-fade-up">
           <p className="text-base font-semibold">
             {t("call.pin_prompt", { ref: heardRef })}
           </p>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={pinHeard}
-              className="min-h-11 rounded-xl bg-white px-4 text-sm font-bold text-[#1e3a5f]"
-            >
+            <button type="button" onClick={pinHeard} className="gold-btn min-h-11">
               {t("call.pin_yes")}
             </button>
             <button
               type="button"
               onClick={() => setHeardRef(null)}
-              className="min-h-11 rounded-xl border border-white/40 px-4 text-sm font-bold"
+              className="min-h-11 rounded-full border border-white/25 px-4 text-sm font-semibold"
             >
               {t("call.pin_no")}
             </button>
@@ -265,7 +261,7 @@ export default function CallPage() {
           <button
             type="button"
             onClick={() => setShowIsl((value) => !value)}
-            className="min-h-11 rounded-xl border border-[var(--setu-line)] bg-[var(--setu-card)] text-sm font-semibold"
+            className="ghost-btn"
           >
             {showIsl ? t("call.isl_hide") : t("call.isl_show")}
           </button>
@@ -282,17 +278,14 @@ export default function CallPage() {
           value={clerkDraft}
           onChange={(e) => setClerkDraft(e.target.value)}
           placeholder={t("call.clerk_input_placeholder")}
-          className="min-h-14 flex-1 rounded-2xl border border-[var(--setu-line)] bg-[var(--setu-card)] px-4 text-base"
+          className="field flex-1"
         />
-        <button
-          type="submit"
-          className="min-h-14 rounded-2xl border border-[var(--setu-ink)] px-4 text-sm font-bold"
-        >
+        <button type="submit" className="ghost-btn min-h-14 px-5">
           {t("call.add_caption")}
         </button>
       </form>
 
-      <div className="mt-4 rounded-3xl border border-[var(--setu-line)] bg-[var(--setu-card)] p-4">
+      <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
         <ReplySuggestions
           suggestions={contextual}
           alwaysPresent={alwaysPresent}
@@ -303,17 +296,15 @@ export default function CallPage() {
           }}
         />
 
-        <div className="mt-4 rounded-2xl bg-[var(--setu-paper)] p-4">
+        <div className="mt-4 rounded-2xl bg-paper p-4">
           {blocked ? (
-            <p className="text-base font-semibold text-[var(--setu-clay)]">
+            <p className="text-base font-semibold text-danger">
               {t("call.otp_blocked")}
             </p>
           ) : (
             <>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--setu-muted)]">
-                {t("call.selected_hint")}
-              </p>
-              <p className="mt-2 text-xl font-semibold leading-snug">
+              <p className="eyebrow">{t("call.selected_hint")}</p>
+              <p className="mt-2 font-serif text-2xl leading-snug">
                 {selected?.sentence ?? t("call.pick_suggestion")}
               </p>
             </>
@@ -325,7 +316,7 @@ export default function CallPage() {
             type="button"
             onClick={() => void handleSend()}
             disabled={!selected}
-            className="min-h-16 flex-1 rounded-2xl bg-[var(--setu-forest)] text-xl font-bold text-white disabled:opacity-40"
+            className="gold-btn min-h-16 flex-1 text-xl"
           >
             {t("call.send")}
           </button>
@@ -336,7 +327,7 @@ export default function CallPage() {
       <button
         type="button"
         onClick={() => setShowKeypad((value) => !value)}
-        className="mt-3 min-h-12 text-sm font-semibold text-[var(--setu-forest)]"
+        className="mt-3 min-h-12 text-sm font-semibold text-signal"
       >
         {showKeypad ? t("call.hide_keypad") : t("call.keypad")}
       </button>

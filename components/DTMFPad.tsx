@@ -9,7 +9,7 @@ export default function DTMFPad({ onKey }: { onKey: (key: string) => void }) {
           key={key}
           type="button"
           onClick={() => onKey(key)}
-          className="min-h-14 rounded-2xl border border-[var(--setu-line)] bg-[var(--setu-card)] text-xl font-mono font-semibold"
+          className="choice min-h-14 font-mono text-xl"
         >
           {key}
         </button>

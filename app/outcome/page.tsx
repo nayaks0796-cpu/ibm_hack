@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AppChrome from "@/components/AppChrome";
 import OutcomeCard from "@/components/OutcomeCard";
 import { t } from "@/lib/i18n";
 import { getPlaybook, playbookTitle } from "@/lib/playbooks";
@@ -24,36 +25,32 @@ export default function OutcomePage() {
   }
 
   if (!ready) {
-    return <main className="min-h-screen" />;
+    return <main className="min-h-screen bg-paper" />;
   }
 
   const playbook = outcome ? getPlaybook(outcome.playbookId) : null;
   const title = playbook ? playbookTitle(playbook) : outcome?.playbookId ?? "";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center px-5 py-10">
-      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--setu-forest)]">
-        {t("app.title")}
-      </p>
-      <h1 className="mt-2 text-3xl font-bold">{t("outcome.title")}</h1>
+    <AppChrome>
+      <main className="mx-auto flex w-full max-w-lg flex-col items-center px-6 pb-20">
+        <p className="eyebrow animate-fade-up">{t("app.title")}</p>
+        <h1 className="mt-3 font-serif text-5xl tracking-[-0.03em] animate-fade-up">
+          {t("outcome.title")}
+        </h1>
 
-      {outcome ? (
-        <div className="mt-8 w-full">
-          <OutcomeCard outcome={outcome} playbookTitle={title} />
-        </div>
-      ) : (
-        <p className="mt-8 text-base text-[var(--setu-muted)]">
-          {t("outcome.no_outcome")}
-        </p>
-      )}
+        {outcome ? (
+          <div className="mt-10 w-full animate-fade-up [animation-delay:80ms]">
+            <OutcomeCard outcome={outcome} playbookTitle={title} />
+          </div>
+        ) : (
+          <p className="mt-8 text-base text-[var(--muted)]">{t("outcome.no_outcome")}</p>
+        )}
 
-      <button
-        type="button"
-        onClick={newCall}
-        className="mt-8 min-h-16 w-full max-w-md rounded-2xl bg-[var(--setu-ink)] text-lg font-bold text-[var(--setu-paper)]"
-      >
-        {t("outcome.new_call")}
-      </button>
-    </main>
+        <button type="button" onClick={newCall} className="gold-btn mt-10 min-h-14 w-full max-w-md text-lg">
+          {t("outcome.new_call")}
+        </button>
+      </main>
+    </AppChrome>
   );
 }

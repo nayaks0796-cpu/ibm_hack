@@ -45,9 +45,7 @@ function SuggestionRow({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--setu-muted)]">
-        {heading}
-      </p>
+      <p className="eyebrow mb-2">{heading}</p>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => {
           const selected = item.id === selectedId;
@@ -56,10 +54,10 @@ function SuggestionRow({
               key={item.id}
               type="button"
               onClick={() => onSelect(item)}
-              className={`min-h-12 rounded-full border px-4 py-2.5 text-left text-sm font-semibold ${
+              className={`min-h-12 rounded-full border px-4 py-2.5 text-left text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 ${
                 selected
-                  ? "border-[var(--setu-forest)] bg-[var(--setu-forest)] text-white"
-                  : "border-[var(--setu-line)] bg-[var(--setu-card)] text-[var(--setu-ink)]"
+                  ? "border-transparent bg-signal text-paper"
+                  : "border-[var(--border)] bg-raised text-ink"
               }`}
             >
               {item.label}

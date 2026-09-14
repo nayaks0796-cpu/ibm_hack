@@ -4,7 +4,7 @@
   "description": "Assistive relay for official phone calls",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4efe4",
-  "theme_color": "#0c4a3e",
+  "background_color": "#f7f6f3",
+  "theme_color": "#0e7c72",
   "icons": []
 }

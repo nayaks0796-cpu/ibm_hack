@@ -22,23 +22,21 @@ export default function OutcomeCard({
   const resultLabel = t(RESULT_KEY[outcome.result]);
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 rounded-3xl border border-[var(--setu-line)] bg-[var(--setu-card)] p-6 shadow-[0_16px_40px_rgba(20,24,31,0.06)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--setu-muted)]">
-        {t("outcome.reference")}
-      </p>
-      <p className="text-4xl font-bold tracking-wide text-[var(--setu-ink)]">
+    <div className="flex w-full flex-col gap-5 rounded-[1.75rem] border border-[var(--border)] bg-raised p-7 shadow-card">
+      <p className="eyebrow">{t("outcome.reference")}</p>
+      <p className="font-serif text-5xl tracking-[-0.03em]">
         {outcome.referenceNumber ?? "—"}
       </p>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-1">
         <MetaRow
           label={t("outcome.result_label")}
           value={
             <span
-              className={`inline-flex min-h-10 items-center rounded-full px-3 text-sm font-semibold ${
+              className={`inline-flex min-h-9 items-center rounded-full px-3 text-sm font-semibold ${
                 outcome.result === "resolved"
-                  ? "bg-[#d8f3e8] text-[var(--setu-forest-ink)]"
-                  : "bg-[#f3e6d8] text-[var(--setu-clay)]"
+                  ? "bg-signal/15 text-signal"
+                  : "bg-highlight/20 text-highlight-ink"
               }`}
             >
               {resultLabel}
@@ -52,14 +50,14 @@ export default function OutcomeCard({
         />
       </div>
 
-      <details className="rounded-2xl border border-[var(--setu-line)] bg-[var(--setu-paper)] px-4 py-3">
-        <summary className="cursor-pointer text-base font-semibold text-[var(--setu-ink)]">
+      <details className="rounded-2xl border border-[var(--border)] bg-paper px-4 py-3">
+        <summary className="cursor-pointer text-base font-semibold">
           {t("outcome.view_transcript")}
         </summary>
         <ol className="mt-3 flex flex-col gap-3">
           {outcome.transcript.map((entry, index) => (
             <li key={`${entry.t}-${index}`} className="text-base leading-snug">
-              <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--setu-muted)]">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
                 {entry.side === "us" ? t("call.you") : t("call.clerk")}
               </span>
               {entry.text}
@@ -73,8 +71,8 @@ export default function OutcomeCard({
 
 function MetaRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-[var(--setu-line)] py-2 last:border-b-0">
-      <span className="text-sm text-[var(--setu-muted)]">{label}</span>
+    <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] py-3 last:border-b-0">
+      <span className="text-sm text-[var(--muted)]">{label}</span>
       <span className="text-right text-base font-semibold">{value}</span>
     </div>
   );

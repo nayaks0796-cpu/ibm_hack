@@ -17,7 +17,7 @@ export default function CaptionFeed({ entries }: { entries: TranscriptEntry[] })
       aria-live="polite"
     >
       {entries.length === 0 ? (
-        <p className="flex min-h-[12rem] flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--setu-line)] bg-[var(--setu-card)] px-4 py-8 text-center text-base text-[var(--setu-muted)]">
+        <p className="flex min-h-[12rem] flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--border)] bg-raised px-4 py-8 text-center text-base text-[var(--muted)]">
           {t("call.clerk_input_placeholder")}
         </p>
       ) : (
@@ -26,19 +26,15 @@ export default function CaptionFeed({ entries }: { entries: TranscriptEntry[] })
           return (
             <article
               key={`${entry.t}-${index}`}
-              className={`rounded-2xl border px-4 py-3 ${
-                isUs
-                  ? "ml-6 border-[#9ad4c4] bg-[#e8f6f1]"
-                  : "mr-6 border-[#c5d4e8] bg-[#eef3f9]"
+              className={`rounded-2xl border border-[var(--border)] px-4 py-3 animate-fade-up ${
+                isUs ? "ml-6 bg-signal/10" : "mr-6 bg-raised"
               }`}
             >
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--setu-muted)]">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
                 {isUs ? t("call.you") : t("call.clerk")}
               </p>
-              <p className="text-xl font-medium leading-snug text-[var(--setu-ink)]">
-                {entry.text}
-              </p>
-              </article>
+              <p className="font-serif text-xl leading-snug">{entry.text}</p>
+            </article>
           );
         })
       )}
