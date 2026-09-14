@@ -3,18 +3,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
-import { t, UI_LANGUAGES } from "@/lib/i18n";
-import { loadFacts, loadProfile, saveFacts, saveProfile } from "@/lib/store";
-import type { CallLanguage, UiLanguage, UserProfile } from "@/lib/types";
+import { applyUiLanguage, t, UI_LANGUAGES, type MessageKey } from "@/lib/i18n";
+import { loadProfile, saveProfile } from "@/lib/store";
+import type { AccessNeed, CallLanguage, UiLanguage, UserProfile } from "@/lib/types";
+import { VOICES, defaultVoiceId, resolveVoiceId } from "@/lib/voices";
 
-const FACT_FIELDS = [
-  { key: "consumer_number", label: "setup.fact.consumer_number" },
-  { key: "area", label: "setup.fact.area" },
-  { key: "bank_name", label: "setup.fact.bank_name" },
-  { key: "hospital_name", label: "setup.fact.hospital_name" },
-] as const;
-
-type FactKey = (typeof FACT_FIELDS)[number]["key"];
+const ACCESS_NEEDS: { id: AccessNeed; label: MessageKey }[] = [
+  { id: "hearing", label: "setup.access_hearing" },
+  { id: "speech", label: "setup.access_speech" },
+  { id: "both", label: "setup.access_both" },
+];
 
 export default function SetupPage() {
   const router = useRouter();
@@ -22,27 +20,16 @@ export default function SetupPage() {
   const [name, setName] = useState("");
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
   const [callLanguage, setCallLanguage] = useState<CallLanguage>("hi");
-  const [islAvatar, setIslAvatar] = useState(true);
-  const [facts, setFacts] = useState<Record<FactKey, string>>({
-    consumer_number: "",
-    area: "",
-    bank_name: "",
-    hospital_name: "",
-  });
+  const [voice, setVoice] = useState(defaultVoiceId("hi"));
+  const [accessNeed, setAccessNeed] = useState<AccessNeed>("both");
 
   useEffect(() => {
     const profile = loadProfile();
-    const storedFacts = loadFacts();
     setName(profile.name);
-    setUiLanguage(profile.uiLanguage);
+    setUiLanguage(applyUiLanguage(profile.uiLanguage));
     setCallLanguage(profile.callLanguage);
-    setIslAvatar(profile.islAvatar);
-    setFacts({
-      consumer_number: storedFacts.consumer_number ?? "",
-      area: storedFacts.area ?? "",
-      bank_name: storedFacts.bank_name ?? "",
-      hospital_name: storedFacts.hospital_name ?? "",
-    });
+    setVoice(resolveVoiceId(profile.voice, profile.callLanguage));
+    setAccessNeed(profile.accessNeed);
     setReady(true);
   }, []);
 
@@ -52,14 +39,12 @@ export default function SetupPage() {
       name: name.trim(),
       uiLanguage,
       callLanguage,
-      voice: "demo",
-      islAvatar,
+      voice: resolveVoiceId(voice, callLanguage),
+      islAvatar: loadProfile().islAvatar,
+      accessNeed,
     };
     saveProfile(profile);
-    saveFacts({
-      ...loadFacts(),
-      ...facts,
-    });
+    applyUiLanguage(uiLanguage);
     router.push("/start");
   }
 
@@ -82,6 +67,25 @@ export default function SetupPage() {
           onSubmit={handleSave}
           className="animate-fade-up space-y-8 [animation-delay:80ms]"
         >
+          <fieldset>
+            <legend className="mb-3 text-sm font-semibold">{t("setup.ui_language")}</legend>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {UI_LANGUAGES.map((lang) => (
+                <button
+                  key={lang.id}
+                  type="button"
+                  onClick={() => {
+                    applyUiLanguage(lang.id);
+                    setUiLanguage(lang.id);
+                  }}
+                  className={`choice ${uiLanguage === lang.id ? "choice-on" : ""}`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
           <label className="flex flex-col gap-2">
             <span className="text-sm font-semibold">{t("setup.name_label")}</span>
             <input
@@ -93,33 +97,17 @@ export default function SetupPage() {
             />
           </label>
 
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold">{t("setup.facts_heading")}</legend>
-            {FACT_FIELDS.map((field) => (
-              <label key={field.key} className="flex flex-col gap-2">
-                <span className="text-sm text-[var(--muted)]">{t(field.label)}</span>
-                <input
-                  value={facts[field.key]}
-                  onChange={(e) =>
-                    setFacts((current) => ({ ...current, [field.key]: e.target.value }))
-                  }
-                  className="field"
-                />
-              </label>
-            ))}
-          </fieldset>
-
           <fieldset>
-            <legend className="mb-3 text-sm font-semibold">{t("setup.ui_language")}</legend>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {UI_LANGUAGES.map((lang) => (
+            <legend className="mb-3 text-sm font-semibold">{t("setup.access_need")}</legend>
+            <div className="grid gap-2">
+              {ACCESS_NEEDS.map((option) => (
                 <button
-                  key={lang.id}
+                  key={option.id}
                   type="button"
-                  onClick={() => setUiLanguage(lang.id)}
-                  className={`choice ${uiLanguage === lang.id ? "choice-on" : ""}`}
+                  onClick={() => setAccessNeed(option.id)}
+                  className={`choice min-h-14 text-left ${accessNeed === option.id ? "choice-on" : ""}`}
                 >
-                  {lang.label}
+                  {t(option.label)}
                 </button>
               ))}
             </div>
@@ -130,8 +118,8 @@ export default function SetupPage() {
             <div className="grid grid-cols-2 gap-2">
               {(
                 [
-                  { id: "hi" as const, label: "setup.call_language.hi" as const },
-                  { id: "en" as const, label: "setup.call_language.en" as const },
+                  { id: "hi" as const, label: "setup.call_language_hi" as const },
+                  { id: "en" as const, label: "setup.call_language_en" as const },
                 ]
               ).map((lang) => (
                 <button
@@ -146,28 +134,19 @@ export default function SetupPage() {
             </div>
           </fieldset>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-semibold">{t("setup.voice")}</span>
-            <div className="choice choice-on min-h-16">{t("setup.voice.demo")}</div>
-          </div>
-
           <fieldset>
-            <legend className="mb-3 text-sm font-semibold">{t("setup.isl_avatar")}</legend>
+            <legend className="mb-3 text-sm font-semibold">{t("setup.voice")}</legend>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setIslAvatar(true)}
-                className={`choice min-h-16 ${islAvatar ? "choice-on" : ""}`}
-              >
-                {t("setup.isl_on")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIslAvatar(false)}
-                className={`choice min-h-16 ${!islAvatar ? "choice-on" : ""}`}
-              >
-                {t("setup.isl_off")}
-              </button>
+              {VOICES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setVoice(option.id)}
+                  className={`choice min-h-16 ${voice === option.id ? "choice-on" : ""}`}
+                >
+                  {option.name}
+                </button>
+              ))}
             </div>
           </fieldset>
 

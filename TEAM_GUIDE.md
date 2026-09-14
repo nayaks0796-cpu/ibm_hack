@@ -19,7 +19,7 @@ behaviour. If your agent wants to do something AGENTS.md doesn't define, stop an
 
 **Arya's definition of done:** all screens work with fake data and no API keys; every
 visible string comes from `messages/`, not hardcoded; playbooks validate against the JSON
-shape in AGENTS.md.
+shape in AGENTS.md. Setup is prefs only; playbook facts live on Start + optional save on Outcome.
 
 ### Satyeta — Antigravity — plumbing + safety
 - Server endpoints: `/api/scribe-token`, `/api/tts` (with cancellation), `/api/suggest`,

@@ -1,38 +1,53 @@
 {
-  "description"     : "========  CWASA installation configuration data  ========",
+  "description": "========  CWASA installation configuration data : Sampark (vhg2026z client Animgen) ========",
 
-  "jasBase"         : "http://vhg.cmp.uea.ac.uk/tech/jas/vhg2017/",
-  "jasVersionTag"   : "vhg2017",
+  "jasBase": "https://vhg.cmp.uea.ac.uk/tech/jas/vhg2026z/",
+  "jasVersionTag": "vhg2026z",
 
-  "sigmlBase"       : "sigml",
-  "avJARBase"		: "avatars",
-  "avJSONBase"      : "avjson",
-  "useAvatarJARs"   : true,
+  "sigmlBase": "sigml",
+  "avJARBase": "avatars",
+  "avJSONBase": "avjson",
+  "useAvatarJARs": true,
 
-  "animgenFPS"      : 120,
-  "animgenServer"   : "http://vhg.cmp.uea.ac.uk/cgi-bin/animgen/animgenserver.pl",
+  "animgenFPS": 30,
 
-  "avs" : [
-    "anna", "marc", "francoise"
-  ],
+  "avs": ["anna", "marc", "francoise"],
 
-  "avsfull" : [
+  "avsfull": [
     "anna",
-    "beatrice", "candy", "darshan", "francoise", "genie", "luna",
-    "marc", "max", "monkey", "otis", "robotboy", "siggi"
+    "marc",
+    "francoise",
+    "luna",
+    "siggi",
+    "robotboy",
+    "beatrice",
+    "genie",
+    "otis",
+    "darshan",
+    "candy",
+    "max",
+    "carmen",
+    "monkey",
+    "dino",
+    "dinoex",
+    "dinototo",
+    "bahia"
   ],
 
-  "avSettings" : [
+  "avSettings": [
     {
-      "description":      "Default if client configuration is missing or restricted",
-      "width":            384,
-      "height":           320,
-      "avList":           "avs",
-      "initAv":           "anna",
-      "initCamera":       [ 0, 0.23, 3.24, 5, 18, 30, -1, -1 ],
-      "allowFrameSteps":  true,
-      "initSiGMLURL":     "iTakeMug.sigml",
-      "allowSiGMLText":   true
+      "description": "Default if client configuration is missing or restricted",
+      "width": 320,
+      "height": 280,
+      "avList": "avs",
+      "initAv": "anna",
+      "background": "#171716",
+      "initCamera": [0, 0.23, 3.24, 5, 18, 30, -1, -1],
+      "initSpeed": 0,
+      "rateSpeed": 5,
+      "allowFrameSteps": false,
+      "initSiGMLURL": "",
+      "allowSiGMLText": false
     }
   ]
 }

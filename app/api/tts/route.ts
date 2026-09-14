@@ -1,11 +1,9 @@
-// POST /api/tts  body: { text: string, lang: "hi" | "en" }
+// POST /api/tts  body: { text: string, lang: "hi" | "en", voice?: string }
 // Streams audio from ElevenLabs TTS. Supports immediate cancellation (barge-in)
 // via the client's AbortController — we abort the upstream fetch when our request aborts.
 import { NextRequest } from "next/server";
+import { elevenLabsIdFor } from "@/lib/voices";
 
-// Single voice that handles both Hindi and English (eleven_flash_v2_5).
-// Set ELEVENLABS_VOICE_ID in .env.local; falls back to a known multilingual voice.
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? "JBFqnCBsd6RMkjVDRZzb";
 const MODEL_ID = "eleven_flash_v2_5";
 
 export async function POST(req: NextRequest) {
@@ -17,7 +15,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { text, lang } = (await req.json()) as { text: string; lang: string };
+  const { text, lang, voice } = (await req.json()) as {
+    text: string;
+    lang: string;
+    voice?: string;
+  };
   if (!text) {
     return new Response(
       JSON.stringify({ error: "text is required" }),
@@ -29,8 +31,13 @@ export async function POST(req: NextRequest) {
   const controller = new AbortController();
   req.signal.addEventListener("abort", () => controller.abort());
 
+  const voiceId = elevenLabsIdFor(voice ?? "", lang);
+  const params = new URLSearchParams({
+    optimize_streaming_latency: "3",
+    output_format: "mp3_44100_128",
+  });
   const upstream = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?${params}`,
     {
       method: "POST",
       signal: controller.signal,

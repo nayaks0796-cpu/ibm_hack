@@ -19,11 +19,14 @@ See `.env.local` (shared privately by Tanis — never commit it):
 
 ```
 ELEVENLABS_API_KEY=
-ELEVENLABS_VOICE_ID=        # optional, falls back to a known multilingual voice
+ELEVENLABS_VOICE_ID_HI=
+ELEVENLABS_VOICE_ID_EN=
+LLM_PROVIDER=groq
+GROQ_API_KEY=                 # console.groq.com — Llama 3.3 70B, free tier
+GROQ_MODEL=llama-3.3-70b-versatile
+# Optional: watsonx if you have IBM keys (LLM_PROVIDER=watsonx)
 WATSONX_API_KEY=
 WATSONX_PROJECT_ID=
-WATSONX_URL=https://us-south.ml.cloud.ibm.com
-WATSONX_MODEL=meta-llama/llama-3-3-70b-instruct
 WATSON_STT_API_KEY=
 WATSON_STT_URL=
 ```

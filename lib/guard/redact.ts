@@ -1,13 +1,24 @@
-// Redaction — replaces digits in sensitive contexts with •••• in stored transcripts.
-// Same trigger words as otp.ts; digits → •••• in stored text.
-// TODO: step 7 — apply to TranscriptEntry before persisting
+// Redaction — digits after OTP/PIN/CVV/password become •••• in stored transcripts.
+import type { TranscriptEntry } from "../types";
+import { SENSITIVE_TRIGGER } from "./otp";
 
-const REDACT_PATTERN =
-  /((?:otp|ओटीपी|pin|पिन|cvv|password|पासवर्ड).{0,40}?)(\d{3,})/gi;
+const REDACT_PATTERN = new RegExp(
+  `((?:${SENSITIVE_TRIGGER})[\\s\\S]{0,40}?)(\\d{3,})`,
+  "gi"
+);
 
-/**
- * Returns a copy of text with sensitive digit sequences replaced by ••••.
- */
 export function redact(text: string): string {
-  return text.replace(REDACT_PATTERN, (_m, prefix, _digits) => `${prefix}••••`);
+  REDACT_PATTERN.lastIndex = 0;
+  return text.replace(REDACT_PATTERN, (_full, prefix: string) => `${prefix}••••`);
+}
+
+export function redactTranscript(entries: TranscriptEntry[]): TranscriptEntry[] {
+  return entries.map((entry) => {
+    const text = redact(entry.text);
+    return {
+      ...entry,
+      text,
+      redacted: entry.redacted || text !== entry.text,
+    };
+  });
 }

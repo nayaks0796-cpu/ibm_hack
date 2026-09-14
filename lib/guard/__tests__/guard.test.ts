@@ -32,6 +32,10 @@ describe("containsSensitiveCode", () => {
   test("does NOT block when keyword present but no 3+ digit sequence", () => {
     expect(containsSensitiveCode("What is your PIN?")).toBe(false);
   });
+
+  test("does NOT block PIN letters inside another word", () => {
+    expect(containsSensitiveCode("Keep spinning 123456")).toBe(false);
+  });
 });
 
 // ── Reference-number detector ──────────────────────────────────────────────────
@@ -61,8 +65,16 @@ describe("detectReferenceNumbers", () => {
     expect(detectReferenceNumbers("Please hold on.")).toEqual([]);
   });
 
+  test("detects lowercase comp-4821", () => {
+    const result = detectReferenceNumbers("complaint number comp-4821");
+    expect(result).toContain("COMP-4821");
+  });
+
+  test("does not treat an OTP as a complaint number", () => {
+    expect(detectReferenceNumbers("OTP is 482911")).toEqual([]);
+  });
+
   test("returns empty array for 5-digit number without keyword", () => {
-    // 5 digits is below the 6-digit threshold for standalone detection
     expect(detectReferenceNumbers("call 98765")).toEqual([]);
   });
 });
@@ -85,5 +97,11 @@ describe("redact", () => {
   test("does not modify text without sensitive keywords", () => {
     const text = "Please give me your consumer number 1234567890.";
     expect(redact(text)).toBe(text);
+  });
+
+  test("redacts Hindi OTP digits", () => {
+    const result = redact("आपका ओटीपी 123456 है");
+    expect(result).not.toContain("123456");
+    expect(result).toContain("••••");
   });
 });

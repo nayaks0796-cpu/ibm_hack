@@ -1,20 +1,19 @@
 // ElevenLabs TTS client — server proxy only, never calls ElevenLabs directly from the browser.
 // Model: eleven_flash_v2_5 (or eleven_multilingual_v2 if latency allows).
-// One voice speaks both Hindi and English.
-// Returns a cancel function for barge-in: calling it aborts the fetch and stops playback.
+// Pass a catalog voice id from lib/voices.ts; the server resolves it to an ElevenLabs UUID.
+// Callers pass AbortSignal so Unmute can cancel the fetch mid-stream (barge-in).
 
-export async function streamTTS(
+export async function fetchTts(
   text: string,
   lang: "hi" | "en",
-  onChunk: (chunk: Uint8Array) => void
-): Promise<() => void> {
-  const controller = new AbortController();
-
+  signal: AbortSignal,
+  voice?: string
+): Promise<ReadableStream<Uint8Array>> {
   const res = await fetch("/api/tts", {
     method: "POST",
-    signal: controller.signal,
+    signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, lang }),
+    body: JSON.stringify({ text, lang, voice }),
   });
 
   if (!res.ok || !res.body) {
@@ -22,15 +21,31 @@ export async function streamTTS(
     throw new Error(`TTS request failed: ${err}`);
   }
 
-  const reader = res.body.getReader();
+  const type = res.headers.get("content-type") ?? "";
+  if (type.includes("application/json")) {
+    throw new Error("TTS request failed: expected audio");
+  }
 
-  // Stream chunks asynchronously; callers can cancel mid-stream via the returned function.
-  (async () => {
+  return res.body;
+}
+
+/** Stream chunks to a callback. Returns a cancel function for barge-in. */
+export async function streamTTS(
+  text: string,
+  lang: "hi" | "en",
+  onChunk: (chunk: Uint8Array) => void,
+  voice?: string
+): Promise<() => void> {
+  const controller = new AbortController();
+  const body = await fetchTts(text, lang, controller.signal, voice);
+  const reader = body.getReader();
+
+  void (async () => {
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        onChunk(value);
+        if (value) onChunk(value);
       }
     } catch {
       // AbortError is expected on barge-in — ignore silently.
@@ -39,6 +54,6 @@ export async function streamTTS(
 
   return () => {
     controller.abort();
-    reader.cancel().catch(() => {});
+    void reader.cancel();
   };
 }

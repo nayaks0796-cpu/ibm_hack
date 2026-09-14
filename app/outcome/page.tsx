@@ -5,17 +5,24 @@ import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
 import OutcomeCard from "@/components/OutcomeCard";
 import RefusedOutcomeBanner from "@/components/RefusedOutcomeBanner";
-import { t } from "@/lib/i18n";
+import { applyUiLanguage, getUiLanguage, t } from "@/lib/i18n";
 import { getPlaybook, playbookTitle } from "@/lib/playbooks";
-import { clearCallSession, loadLastOutcome } from "@/lib/store";
+import {
+  clearCallSession,
+  loadLastOutcome,
+  loadProfile,
+  mergeSavedFacts,
+} from "@/lib/store";
 import type { Outcome } from "@/lib/types";
 
 export default function OutcomePage() {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [ready, setReady] = useState(false);
+  const [factsSaved, setFactsSaved] = useState(false);
 
   useEffect(() => {
+    applyUiLanguage(loadProfile().uiLanguage);
     setOutcome(loadLastOutcome());
     setReady(true);
   }, []);
@@ -25,12 +32,33 @@ export default function OutcomePage() {
     router.push("/start");
   }
 
+  function saveFactsForNextTime() {
+    if (!outcome?.facts) return;
+    mergeSavedFacts(outcome.facts);
+    setFactsSaved(true);
+  }
+
   if (!ready) {
     return <main className="min-h-screen bg-paper" />;
   }
 
   const playbook = outcome ? getPlaybook(outcome.playbookId) : null;
-  const title = playbook ? playbookTitle(playbook) : outcome?.playbookId ?? "";
+  const title = playbook ? playbookTitle(playbook, getUiLanguage()) : outcome?.playbookId ?? "";
+  const uiLanguage = getUiLanguage();
+  const callFacts = outcome?.facts ?? {};
+  const factRows =
+    playbook?.facts
+      .map((fact) => {
+        const value = (callFacts[fact.key] ?? "").trim();
+        if (!value) return null;
+        return {
+          key: fact.key,
+          label: fact.label[uiLanguage] ?? fact.label.en ?? fact.key,
+          value,
+        };
+      })
+      .filter((row): row is { key: string; label: string; value: string } => row !== null) ??
+    [];
 
   return (
     <AppChrome>
@@ -44,10 +72,40 @@ export default function OutcomePage() {
           <div className="mt-10 w-full animate-fade-up [animation-delay:80ms]">
             {outcome.result === "refused" ? (
               <div className="mb-4">
-                <RefusedOutcomeBanner />
+                <RefusedOutcomeBanner lang={getUiLanguage()} />
               </div>
             ) : null}
             <OutcomeCard outcome={outcome} playbookTitle={title} />
+
+            {factRows.length > 0 ? (
+              <section className="mt-6 w-full">
+                <h2 className="eyebrow">{t("outcome.facts_heading")}</h2>
+                <ul className="mt-3 space-y-2">
+                  {factRows.map((row) => (
+                    <li
+                      key={row.key}
+                      className="flex items-baseline justify-between gap-4 border-b border-[var(--line)] py-2 text-sm"
+                    >
+                      <span className="text-[var(--muted)]">{row.label}</span>
+                      <span className="text-right font-medium">{row.value}</span>
+                    </li>
+                  ))}
+                </ul>
+                {factsSaved ? (
+                  <p className="mt-4 text-sm font-semibold text-[var(--muted)]">
+                    {t("outcome.facts_saved")}
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={saveFactsForNextTime}
+                    className="choice mt-4 w-full min-h-14 text-base font-semibold"
+                  >
+                    {t("outcome.save_facts")}
+                  </button>
+                )}
+              </section>
+            ) : null}
           </div>
         ) : (
           <p className="mt-8 text-base text-[var(--muted)]">{t("outcome.no_outcome")}</p>

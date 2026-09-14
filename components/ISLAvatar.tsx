@@ -1,77 +1,70 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
+import { bootCwasa, glossToSigml, playSigml } from "@/lib/isl/cwasa";
 
 interface Props {
   gloss?: string[];
   visible?: boolean;
 }
 
-declare global {
-  interface Window {
-    CWASAPlayer?: {
-      init: (containerId: string, configUrl: string) => void;
-      playSiGMLText: (sigml: string) => void;
-      playSiGMLURL: (url: string) => void;
-    };
-  }
-}
-
 export default function ISLAvatar({ gloss = [], visible = true }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const playerReady = useRef(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [playing, setPlaying] = useState("HELLO");
 
   useEffect(() => {
-    if (playerReady.current) return;
-    const script = document.createElement("script");
-    script.src = "/isl/js/allcsa.min.js";
-    script.async = true;
-    script.onload = () => {
-      if (window.CWASAPlayer && containerRef.current) {
-        window.CWASAPlayer.init(
-          containerRef.current.id,
-          "/isl/js/cwaclientcfg.json"
-        );
-        playerReady.current = true;
-      }
-    };
-    document.head.appendChild(script);
-    return () => {
-      script.onload = null;
-    };
-  }, []);
+    if (!visible) return;
 
-  useEffect(() => {
-    if (!playerReady.current || !window.CWASAPlayer || gloss.length === 0) return;
-    void (async () => {
-      for (const word of gloss) {
-        const url = `/isl/SignFiles/${encodeURIComponent(word)}.sigml`;
-        try {
-          const res = await fetch(url, { method: "HEAD" });
-          if (res.ok) {
-            window.CWASAPlayer!.playSiGMLURL(url);
-          } else {
-            for (const char of word.toUpperCase()) {
-              const charUrl = `/isl/SignFiles/${encodeURIComponent(char)}.sigml`;
-              window.CWASAPlayer!.playSiGMLURL(charUrl);
-            }
-          }
-        } catch {
-          // Skip unknown signs.
+    let cancelled = false;
+    void bootCwasa()
+      .then(() => {
+        if (!cancelled) setStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (document.querySelector(".CWASAAvatar.av0 canvas")) {
+          setStatus("ready");
+          return;
         }
-      }
-    })();
-  }, [gloss]);
+        setStatus("error");
+      });
 
-  if (!visible) return null;
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    if (status !== "ready" || gloss.length === 0) return;
+    const label = gloss.join(" ");
+    setPlaying(label);
+    void glossToSigml(gloss).then(playSigml);
+  }, [gloss, status]);
 
   return (
-    <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/70">
-      <div
-        id="cwasa-player-container"
-        ref={containerRef}
-        className="h-full w-full"
-      />
+    <div
+      className={`relative flex aspect-video w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 ${
+        visible ? "" : "hidden"
+      }`}
+    >
+      <div className="CWASAAvatar av0 h-full w-full" />
+
+      {status === "loading" ? (
+        <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">
+          {t("call.isl_loading")}
+        </p>
+      ) : null}
+
+      {status === "error" ? (
+        <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold text-paper/80">
+          {t("call.isl_error")}
+        </p>
+      ) : null}
+
+      <p className="pointer-events-none absolute inset-x-3 bottom-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">
+        {playing}
+      </p>
     </div>
   );
 }

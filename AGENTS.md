@@ -65,15 +65,19 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 
 ## The four screens
 
-1. **Setup (once)** — name; saved facts (consumer number, area, bank name, hospital name);
-   UI language (8); call language (hi/en); voice choice; ISL avatar on/off.
-2. **Start a call** — situation cards (Power cut / Bank-1930 / Hospital); confirm/edit facts
-   as short buttons; big Call button.
-3. **Live call** — caption feed (clerk side + our side); ISL avatar panel (toggleable);
-   3–5 LLM reply suggestions + the 4 always-present ones; Send button showing the exact
-   sentence; Unmute button; DTMF keypad; silence indicator; pin-number confirmation banner.
+1. **Setup (once)** — name; UI language (8); call language (hi/en); voice choice.
+   No playbook facts and no ISL toggle here.
+2. **Start a call** — situation cards (Power cut / Bank-1930 / Hospital); ISL avatar
+   on/off for this call; enter/confirm only that playbook's facts (prefilled from any
+   facts saved after a past call); big Call button. Facts for this call live on the
+   call session until the user opts to save them later.
+3. **Live call** — caption feed (clerk side + our side); ISL avatar panel with a
+   always-visible top-corner on/off control; 3–5 LLM reply suggestions + the 4
+   always-present ones; Send button showing the exact sentence; Unmute button;
+   DTMF keypad; silence indicator; pin-number confirmation banner.
 4. **Outcome card** — reference number, result, playbook name, duration; collapsed
-   "View full conversation" (redacted); "New call" button. Saved on device.
+   "View full conversation" (redacted); optional "Save these facts for next time";
+   "New call" button. Saved on device.
 
 ## Repo structure
 
@@ -153,10 +157,13 @@ setu/
   "startedAt": 0, "endedAt": 0,
   "result": "resolved",
   "referenceNumber": "COMP-4821",
+  "facts": { "consumer_number": "1234567890", "area": "Andheri" },
   "transcript": []
 }
 ```
 `result`: `"resolved" | "refused" | "no-answer" | "incomplete"`.
+`facts` are the playbook-scoped values used on that call. They are remembered across
+calls only if the user taps "Save these facts for next time" on the outcome screen.
 
 ## Guard rules (lib/guard)
 

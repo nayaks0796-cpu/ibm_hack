@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Figtree, Instrument_Serif } from "next/font/google";
+import I18nProvider from "@/components/I18nProvider";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -30,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${figtree.variable} ${instrument.variable}`}>
       <body className="min-h-screen overflow-x-hidden bg-paper font-sans text-ink antialiased">
-        {children}
+        <I18nProvider>{children}</I18nProvider>
       </body>
     </html>
   );

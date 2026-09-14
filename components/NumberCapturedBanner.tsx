@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 
 export interface NumberCapturedBannerProps {
@@ -21,6 +21,10 @@ export default function NumberCapturedBanner({
   lang = "en",
 }: NumberCapturedBannerProps) {
   const [pinned, setPinned] = useState(false);
+
+  useEffect(() => {
+    setPinned(false);
+  }, [referenceNumber]);
 
   if (!referenceNumber) return null;
 

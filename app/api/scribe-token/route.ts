@@ -12,7 +12,7 @@ export async function POST() {
   }
 
   const res = await fetch(
-    "https://api.elevenlabs.io/v1/convai/conversation/token",
+    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
     {
       method: "POST",
       headers: {
@@ -30,6 +30,20 @@ export async function POST() {
     );
   }
 
-  const data = await res.json();
-  return NextResponse.json({ token: data.token ?? data.signed_url ?? data });
+  const data = (await res.json()) as
+    | string
+    | { token?: string; single_use_token?: string };
+  const token =
+    typeof data === "string"
+      ? data
+      : data.token ?? data.single_use_token ?? "";
+
+  if (!token) {
+    return NextResponse.json(
+      { error: "ElevenLabs did not return a Scribe token" },
+      { status: 502 }
+    );
+  }
+
+  return NextResponse.json({ token });
 }

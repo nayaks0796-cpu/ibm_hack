@@ -1,6 +1,6 @@
 // POST /api/gloss  body: { text: string }
-// Returns: { gloss: string[] }  — English uppercase words for the ISL avatar.
-// Unknown words are fingerspelled (each character as a separate item).
+// Returns: { gloss: string[] }  — catalog-aligned English uppercase words.
+// Unknown leftover words are fingerspelled (each character as a separate item).
 import { NextRequest, NextResponse } from "next/server";
 import { gloss } from "@/lib/watsonx/llama";
 

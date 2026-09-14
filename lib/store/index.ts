@@ -1,13 +1,15 @@
 // localStorage / IndexedDB helpers for Sampark.
 // All user data lives on-device. No accounts, no server-side database.
 
-import { redact } from "../guard/redact";
+import { redact, redactTranscript } from "../guard/redact";
 import type {
+  AccessNeed,
   CallSession,
   Outcome,
   TranscriptEntry,
   UserProfile,
 } from "../types";
+import { defaultVoiceId, resolveVoiceId } from "../voices";
 
 const FACTS_KEY = "setu:facts";
 const OUTCOMES_KEY = "setu:outcomes";
@@ -20,9 +22,17 @@ const DEFAULT_PROFILE: UserProfile = {
   name: "",
   uiLanguage: "en",
   callLanguage: "hi",
-  voice: "demo",
+  voice: defaultVoiceId("hi"),
   islAvatar: true,
+  accessNeed: "both",
 };
+
+function resolveAccessNeed(value: unknown): AccessNeed {
+  if (value === "hearing" || value === "speech" || value === "both") {
+    return value;
+  }
+  return DEFAULT_PROFILE.accessNeed;
+}
 
 function readJson<T>(storage: Storage, key: string, fallback: T): T {
   try {
@@ -42,13 +52,42 @@ export function loadFacts(): Record<string, string> {
   return readJson(localStorage, FACTS_KEY, {});
 }
 
+/** Merge playbook facts into remembered facts (used after the call, if the user opts in). */
+export function mergeSavedFacts(partial: Record<string, string>): void {
+  const next = { ...loadFacts() };
+  for (const [key, value] of Object.entries(partial)) {
+    const trimmed = value.trim();
+    if (trimmed) next[key] = trimmed;
+  }
+  saveFacts(next);
+}
+
+/** Pick only the keys a playbook needs, prefilled from remembered facts when present. */
+export function factsForPlaybook(
+  playbookKeys: string[],
+  source: Record<string, string> = loadFacts()
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of playbookKeys) {
+    out[key] = (source[key] ?? "").trim();
+  }
+  return out;
+}
+
 export function saveProfile(profile: UserProfile): void {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
 }
 
 export function loadProfile(): UserProfile {
   const stored = readJson<Partial<UserProfile>>(localStorage, PROFILE_KEY, {});
-  return { ...DEFAULT_PROFILE, ...stored, voice: "demo" };
+  const merged = { ...DEFAULT_PROFILE, ...stored };
+  const callLanguage = merged.callLanguage === "en" ? "en" : "hi";
+  return {
+    ...merged,
+    callLanguage,
+    voice: resolveVoiceId(stored.voice, callLanguage),
+    accessNeed: resolveAccessNeed(stored.accessNeed),
+  };
 }
 
 export function hasCompletedSetup(): boolean {
@@ -56,10 +95,15 @@ export function hasCompletedSetup(): boolean {
 }
 
 export function saveOutcome(outcome: Outcome): void {
+  const safe: Outcome = {
+    ...outcome,
+    facts: outcome.facts ?? {},
+    transcript: redactTranscript(outcome.transcript),
+  };
   const existing = loadOutcomes();
-  existing.push(outcome);
+  existing.push(safe);
   localStorage.setItem(OUTCOMES_KEY, JSON.stringify(existing));
-  sessionStorage.setItem(LAST_OUTCOME_KEY, JSON.stringify(outcome));
+  sessionStorage.setItem(LAST_OUTCOME_KEY, JSON.stringify(safe));
 }
 
 export function loadOutcomes(): Outcome[] {

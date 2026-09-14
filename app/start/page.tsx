@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
-import { t } from "@/lib/i18n";
+import { applyUiLanguage, t } from "@/lib/i18n";
 import { PLAYBOOKS, playbookGoal, playbookTitle } from "@/lib/playbooks";
 import {
   clearCurrentTranscript,
+  factsForPlaybook,
   loadFacts,
   loadProfile,
   saveCallSession,
-  saveFacts,
+  saveProfile,
 } from "@/lib/store";
-import type { Playbook } from "@/lib/types";
+import { RoomTransport } from "@/lib/transport/RoomTransport";
+import type { Playbook, UiLanguage } from "@/lib/types";
 
 export default function StartPage() {
   const router = useRouter();
@@ -23,6 +25,8 @@ export default function StartPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [playbookId, setPlaybookId] = useState("power-cut");
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
+  const [islAvatar, setIslAvatar] = useState(true);
 
   useEffect(() => {
     const profile = loadProfile();
@@ -31,12 +35,36 @@ export default function StartPage() {
       return;
     }
     setName(profile.name);
-    setFacts(loadFacts());
+    setUiLanguage(profile.uiLanguage);
+    setIslAvatar(profile.islAvatar);
+    applyUiLanguage(profile.uiLanguage);
+    const initial =
+      PLAYBOOKS.find((item) => item.id === "power-cut") ?? PLAYBOOKS[0];
+    setFacts(
+      factsForPlaybook(
+        initial.facts.map((fact) => fact.key),
+        loadFacts()
+      )
+    );
     setReady(true);
   }, [router]);
 
   const playbook: Playbook =
     PLAYBOOKS.find((item) => item.id === playbookId) ?? PLAYBOOKS[0];
+
+  function selectPlaybook(id: string) {
+    const next = PLAYBOOKS.find((item) => item.id === id) ?? PLAYBOOKS[0];
+    setPlaybookId(next.id);
+    setEditingKey(null);
+    // Prefill from remembered facts for this playbook; keep in-progress edits
+    // for keys that also appear on the new playbook.
+    setFacts((current) =>
+      factsForPlaybook(
+        next.facts.map((fact) => fact.key),
+        { ...loadFacts(), ...current }
+      )
+    );
+  }
 
   function beginEdit(key: string) {
     setEditingKey(key);
@@ -45,20 +73,32 @@ export default function StartPage() {
 
   function commitEdit() {
     if (!editingKey) return;
-    const next = { ...facts, [editingKey]: draft.trim() };
-    setFacts(next);
-    saveFacts(next);
+    setFacts((current) => ({
+      ...current,
+      [editingKey]: draft.trim(),
+    }));
     setEditingKey(null);
   }
 
-  function startCall() {
+  async function startCall() {
     const profile = loadProfile();
+    const nextProfile = { ...profile, islAvatar };
+    saveProfile(nextProfile);
+    const callFacts = factsForPlaybook(
+      playbook.facts.map((fact) => fact.key),
+      facts
+    );
     clearCurrentTranscript();
     saveCallSession({
       playbookId: playbook.id,
       startedAt: Date.now(),
       callLanguage: profile.callLanguage,
       pinnedReferenceNumber: null,
+      facts: callFacts,
+      islAvatar,
+    });
+    void RoomTransport.requestMicAccess().catch(() => {
+      // Call page will offer Allow microphone and keep the typed clerk line.
     });
     router.push("/call");
   }
@@ -89,25 +129,47 @@ export default function StartPage() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setPlaybookId(item.id)}
+              onClick={() => selectPlaybook(item.id)}
               className={`choice h-full p-5 text-left ${
                 playbookId === item.id ? "choice-on" : ""
               }`}
             >
-              <span className="block font-serif text-2xl">{playbookTitle(item)}</span>
+              <span className="block font-serif text-2xl">{playbookTitle(item, uiLanguage)}</span>
               <span className="mt-2 block text-sm font-normal text-[var(--muted)]">
-                {playbookGoal(item)}
+                {playbookGoal(item, uiLanguage)}
               </span>
             </button>
           ))}
         </div>
 
+        <section className="mt-8">
+          <h2 className="eyebrow">{t("start.isl_avatar")}</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">{t("start.isl_hint")}</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setIslAvatar(true)}
+              className={`choice min-h-16 ${islAvatar ? "choice-on" : ""}`}
+            >
+              {t("setup.isl_on")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIslAvatar(false)}
+              className={`choice min-h-16 ${!islAvatar ? "choice-on" : ""}`}
+            >
+              {t("setup.isl_off")}
+            </button>
+          </div>
+        </section>
+
         <section className="mt-10">
           <h2 className="eyebrow">{t("start.confirm_facts")}</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">{t("start.facts_hint")}</p>
           <div className="mt-4 flex flex-col gap-2">
             {playbook.facts.map((fact) => {
               const value = facts[fact.key] ?? "";
-              const label = fact.label.en ?? fact.key;
+              const label = fact.label[uiLanguage] ?? fact.label.en ?? fact.key;
               if (editingKey === fact.key) {
                 return (
                   <label key={fact.key} className="flex flex-col gap-2">

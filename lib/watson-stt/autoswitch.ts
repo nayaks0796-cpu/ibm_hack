@@ -1,6 +1,5 @@
-// Auto-switch logic: uses ElevenLabs Scribe by default; switches to Watson STT
-// when Scribe returns a quota/credit error — no page reload required.
-// Both engines emit the same CaptionCallback shape so CaptionFeed is unaware.
+// Auto-switch: ElevenLabs Scribe first; Watson STT if Scribe hits quota, auth, or won't start.
+// No page reload. Both engines call the same onCaption shape.
 // bob: watson stt fallback
 
 export type { CaptionCallback } from "./client";
@@ -10,16 +9,29 @@ import type { CaptionCallback } from "./client";
 
 type CallLanguage = "hi" | "en";
 
-/**
- * Returns a unified STT controller that:
- * 1. Starts ElevenLabs Scribe.
- * 2. On quota/credit error, silently switches to Watson STT.
- * 3. Calls onBackup() when the switch happens (so the UI can show the banner).
- */
+export function isBackupError(err: unknown): boolean {
+  const msg = String(err).toLowerCase();
+  return (
+    msg.includes("quota") ||
+    msg.includes("credit") ||
+    msg.includes("insufficient") ||
+    msg.includes("429") ||
+    msg.includes("401") ||
+    msg.includes("403") ||
+    msg.includes("rate_limited") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("auth_error") ||
+    msg.includes("unauthorized") ||
+    msg.includes("not configured") ||
+    msg.includes("scribe")
+  );
+}
+
 export function createSTTWithFallback(
   lang: CallLanguage,
   onCaption: CaptionCallback,
-  onBackup: () => void
+  onBackup: () => void,
+  keyterms: string[] = []
 ) {
   const watsonLang =
     lang === "hi" ? "hi-IN_Telephony" : "en-IN_Telephony";
@@ -30,32 +42,29 @@ export function createSTTWithFallback(
 
   const switchToWatson = async () => {
     if (usingBackup) return;
-    usingBackup = true;
     scribe.disconnect();
+    await watson.connect(watsonLang, onCaption);
+    usingBackup = true;
     onBackup();
-    try {
-      await watson.connect(watsonLang, onCaption);
-    } catch (err) {
-      console.error("[STT] Watson backup connect failed:", err);
-    }
   };
 
-  const connect = async (token: string) => {
+  const connect = async (token: string | null) => {
+    if (!token) {
+      await switchToWatson();
+      return;
+    }
     try {
-      await scribe.connect(token, onCaption);
-    } catch (err: unknown) {
-      // Detect quota/credit error from ElevenLabs.
-      const msg = String(err).toLowerCase();
-      if (
-        msg.includes("quota") ||
-        msg.includes("credit") ||
-        msg.includes("insufficient") ||
-        msg.includes("429")
-      ) {
-        await switchToWatson();
-      } else {
-        throw err;
-      }
+      await scribe.connect(token, onCaption, {
+        language: lang,
+        keyterms,
+        onError: (err) => {
+          if (isBackupError(err)) {
+            void switchToWatson().catch(() => undefined);
+          }
+        },
+      });
+    } catch {
+      await switchToWatson();
     }
   };
 
@@ -64,12 +73,12 @@ export function createSTTWithFallback(
     watson.disconnect();
   };
 
-  /** Forward audio to whichever engine is active (Watson needs raw audio pushed). */
   const sendAudio = (chunk: ArrayBuffer | Blob) => {
     if (usingBackup) {
       watson.sendAudio(chunk);
+      return;
     }
-    // Scribe receives audio via its own WebSocket connection (handled internally).
+    scribe.sendAudio(chunk);
   };
 
   return { connect, disconnect, sendAudio };

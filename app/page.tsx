@@ -1,30 +1,20 @@
+"use client";
+
 import BrandMark from "@/components/BrandMark";
 import HeroConsole from "@/components/landing/HeroConsole";
 import LandingCta from "@/components/landing/LandingCta";
 import { t } from "@/lib/i18n";
 
 const STEPS = [
-  {
-    n: "01",
-    title: "Confirm the facts you already have",
-    body: "Name, consumer number, area — only what you typed. Sampark will not invent a number or a name.",
-  },
-  {
-    n: "02",
-    title: "Read every word",
-    body: "The clerk’s voice becomes live captions. A silence ring shows whether the line is active, quiet, or gone.",
-  },
-  {
-    n: "03",
-    title: "Tap a reply. Then Send.",
-    body: "Nothing is spoken until you approve the exact sentence. OTP, PIN, CVV and passwords are never spoken.",
-  },
+  { n: "01", title: "land.step1_title" as const, body: "land.step1_body" as const },
+  { n: "02", title: "land.step2_title" as const, body: "land.step2_body" as const },
+  { n: "03", title: "land.step3_title" as const, body: "land.step3_body" as const },
 ];
 
 const TIMELINE = [
-  { t: "00:00", title: "You press Call", body: "Sampark opens the line. The first sentence names you as an assistive relay." },
-  { t: "00:18", title: "The clerk is captioned", body: "You read the line, tap a reply suggestion, and press Send." },
-  { t: "02:46", title: "Complaint number received", body: "Pin it when you hear it. The outcome card keeps that number on top." },
+  { time: "land.tl1_time" as const, title: "land.tl1_title" as const, body: "land.tl1_body" as const },
+  { time: "land.tl2_time" as const, title: "land.tl2_title" as const, body: "land.tl2_body" as const },
+  { time: "land.tl3_time" as const, title: "land.tl3_title" as const, body: "land.tl3_body" as const },
 ];
 
 export default function LandingPage() {
@@ -109,8 +99,8 @@ export default function LandingPage() {
                   style={{ animationDelay: `${i * 90}ms` }}
                 >
                   <p className="font-serif text-3xl text-highlight-ink">{step.n}</p>
-                  <h3 className="mt-4 font-serif text-2xl">{step.title}</h3>
-                  <p className="mt-3 text-base leading-relaxed text-[var(--muted)]">{step.body}</p>
+                  <h3 className="mt-4 font-serif text-2xl">{t(step.title)}</h3>
+                  <p className="mt-3 text-base leading-relaxed text-[var(--muted)]">{t(step.body)}</p>
                 </article>
               ))}
             </div>
@@ -127,13 +117,13 @@ export default function LandingPage() {
             <ol className="mt-14 space-y-0">
               {TIMELINE.map((row) => (
                 <li
-                  key={row.t}
+                  key={row.time}
                   className="grid gap-4 border-t border-[var(--border)] py-8 md:grid-cols-[7rem_1fr] md:items-baseline"
                 >
-                  <p className="font-serif text-2xl text-highlight-ink">{row.t}</p>
+                  <p className="font-serif text-2xl text-highlight-ink">{t(row.time)}</p>
                   <div>
-                    <h3 className="text-xl font-semibold">{row.title}</h3>
-                    <p className="mt-2 text-[var(--muted)]">{row.body}</p>
+                    <h3 className="text-xl font-semibold">{t(row.title)}</h3>
+                    <p className="mt-2 text-[var(--muted)]">{t(row.body)}</p>
                   </div>
                 </li>
               ))}

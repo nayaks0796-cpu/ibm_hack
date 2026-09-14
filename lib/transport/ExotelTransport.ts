@@ -7,13 +7,17 @@ export class ExotelTransport implements AudioTransport {
     throw new Error("ExotelTransport not yet implemented (phase 2)");
   }
   stopInbound(): void {}
-  async speak(_text: string, _lang: "hi" | "en"): Promise<() => void> {
+  async speak(_text: string, _lang: "hi" | "en", _voice?: string): Promise<() => void> {
     throw new Error("ExotelTransport not yet implemented (phase 2)");
   }
+  stopSpeaking(): void {}
   sendDTMF(_key: string): void {}
   onLineState(
     _cb: (state: "active" | "silent" | "disconnected") => void
   ): () => void {
+    return () => {};
+  }
+  onInboundAudio(_cb: (pcm16: ArrayBuffer) => void): () => void {
     return () => {};
   }
 }

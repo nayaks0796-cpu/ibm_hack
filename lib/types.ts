@@ -24,17 +24,24 @@ export interface Outcome {
   endedAt: number;
   result: OutcomeResult;
   referenceNumber: string | null;
+  /** Playbook-scoped facts used on this call (for optional "save for next time"). */
+  facts: Record<string, string>;
   transcript: TranscriptEntry[];
 }
 
 export type UiLanguage = "en" | "hi" | "ta" | "te" | "kn" | "ml" | "mr" | "bn";
 
+/** Why the user needs the relay — drives the Introduce myself disclosure. */
+export type AccessNeed = "hearing" | "speech" | "both";
+
 export interface UserProfile {
   name: string;
   uiLanguage: UiLanguage;
   callLanguage: CallLanguage;
-  voice: "demo";
+  /** Catalog id from lib/voices.ts (e.g. "hi", "en"). */
+  voice: string;
   islAvatar: boolean;
+  accessNeed: AccessNeed;
 }
 
 export interface CallSession {
@@ -42,6 +49,10 @@ export interface CallSession {
   startedAt: number;
   callLanguage: CallLanguage;
   pinnedReferenceNumber: string | null;
+  /** Facts for this call only — not auto-saved to remembered facts. */
+  facts: Record<string, string>;
+  /** Initial ISL preference for this call; can still toggle live. */
+  islAvatar: boolean;
 }
 
 export interface ReplySuggestion {
