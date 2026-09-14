@@ -1,6 +1,6 @@
 // OTP/PIN guard — blocks TTS from speaking sensitive codes.
 // Trigger: digit sequence of 3+ within 40 chars after OTP/ओटीपी/PIN/पिन/CVV/password/पासवर्ड
-// When blocked, shows: "Setu will not speak codes. Unmute to say it yourself."
+// When blocked, shows: "Sampark will not speak codes. Unmute to say it yourself."
 // TODO: step 7 — implement and wire into Send flow
 
 const TRIGGER_PATTERN =

@@ -39,14 +39,14 @@ export default function HeroConsole() {
 
           <div className="rounded-2xl bg-paper px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-              You told Setu
+              You told Sampark
             </p>
             <p className="mt-1 text-sm font-semibold">Ask for the complaint number</p>
           </div>
 
           <div className="rounded-2xl bg-signal/10 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-signal">
-              Setu replies · Hindi
+              Sampark replies · Hindi
             </p>
             <p className="mt-1 text-base font-medium">
               कृपया शिकायत संख्या बताइए।

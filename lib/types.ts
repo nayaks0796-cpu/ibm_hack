@@ -1,4 +1,4 @@
-// Shared TypeScript types used across the Setu codebase.
+// Shared TypeScript types used across the Sampark codebase.
 // Keep in sync with the JSON shapes in AGENTS.md.
 
 export type CallLanguage = "hi" | "en";

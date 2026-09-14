@@ -1,4 +1,4 @@
-// localStorage / IndexedDB helpers for Setu.
+// localStorage / IndexedDB helpers for Sampark.
 // All user data lives on-device. No accounts, no server-side database.
 
 import { redact } from "../guard/redact";

@@ -1,11 +1,11 @@
-# AGENTS.md — The Setu Contract
+# AGENTS.md — The Sampark Contract
 
 Every agent (IBM Bob, Cursor, Antigravity) and every human on this team builds against this file.
 If a behaviour is not defined here, DO NOT invent it — ask Tanis.
 
-## What Setu is
+## What Sampark is
 
-Setu is a web app that acts as the ears and mouth of a deaf or non-verbal person on one
+Sampark is a web app that acts as the ears and mouth of a deaf or non-verbal person on one
 official phone call (electricity board, bank, hospital, cyber helpline 1930), ending in a
 complaint/reference number. The clerk on the other side uses a normal phone and installs nothing.
 
@@ -16,7 +16,7 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 
 1. **Nothing is spoken without Send.** The app never auto-replies. The user taps a reply
    suggestion, sees the exact sentence, and taps Send. Only then does TTS speak.
-2. **OTP/PIN guard.** Setu never speaks an OTP, PIN, CVV, or password through TTS, even if
+2. **OTP/PIN guard.** Sampark never speaks an OTP, PIN, CVV, or password through TTS, even if
    asked. These are also redacted (shown as ••••) in the saved transcript.
 3. **The outcome card is the product.** After the call, the user sees ONE card: reference
    number on top, result (resolved/refused/incomplete), time. Full transcript is available
@@ -161,7 +161,7 @@ setu/
 ## Guard rules (lib/guard)
 
 - **Block from TTS**: any digit sequence of 3+ within 40 chars after (case/lang-insensitive)
-  OTP / ओटीपी / PIN / पिन / CVV / password / पासवर्ड. Blocked send shows: "Setu will not
+  OTP / ओटीपी / PIN / पिन / CVV / password / पासवर्ड. Blocked send shows: "Sampark will not
   speak codes. Unmute to say it yourself."
 - **Reference-number detector**: patterns like `[A-Z]{2,6}[-/ ]?\d{4,12}`, standalone 6–13
   digit numbers following words like complaint/शिकायत/reference/ticket/registration.

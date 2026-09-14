@@ -33,7 +33,7 @@ export default function BrandMark({ href = "/" }: { href?: string }) {
       className="flex items-center gap-2.5 text-ink transition-opacity duration-200 hover:opacity-80"
     >
       <BridgeIcon />
-      <span className="text-2xl font-semibold tracking-tight">Setu</span>
+      <span className="text-2xl font-semibold tracking-tight">Sampark</span>
     </Link>
   );
 }

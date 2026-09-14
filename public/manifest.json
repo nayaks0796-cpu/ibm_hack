@@ -1,6 +1,6 @@
 {
-  "name": "Setu",
-  "short_name": "Setu",
+  "name": "Sampark",
+  "short_name": "Sampark",
   "description": "Assistive relay for official phone calls",
   "start_url": "/",
   "display": "standalone",

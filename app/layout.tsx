@@ -16,9 +16,9 @@ const instrument = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Setu — a phone relay for deaf and non-verbal India",
+  title: "Sampark — a phone relay for deaf and non-verbal India",
   description:
-    "Setu helps deaf and non-verbal people make official phone calls via live captions and reply suggestions.",
+    "Sampark helps deaf and non-verbal people make official phone calls via live captions and reply suggestions.",
   manifest: "/manifest.json",
 };
 

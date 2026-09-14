@@ -1,6 +1,6 @@
-# Setu
+# Sampark
 
-Setu is a web app that acts as the ears and mouth of a deaf or non-verbal person on an official phone call (electricity board, bank, hospital, cyber helpline 1930). The clerk uses a normal phone and installs nothing.
+Sampark is a web app that acts as the ears and mouth of a deaf or non-verbal person on an official phone call (electricity board, bank, hospital, cyber helpline 1930). The clerk uses a normal phone and installs nothing.
 
 See [`AGENTS.md`](AGENTS.md) for the full product contract and [`TEAM_GUIDE.md`](TEAM_GUIDE.md) for team responsibilities.
 

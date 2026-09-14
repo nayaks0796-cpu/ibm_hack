@@ -7,7 +7,7 @@ const STEPS = [
   {
     n: "01",
     title: "Confirm the facts you already have",
-    body: "Name, consumer number, area — only what you typed. Setu will not invent a number or a name.",
+    body: "Name, consumer number, area — only what you typed. Sampark will not invent a number or a name.",
   },
   {
     n: "02",
@@ -22,7 +22,7 @@ const STEPS = [
 ];
 
 const TIMELINE = [
-  { t: "00:00", title: "You press Call", body: "Setu opens the line. The first sentence names you as an assistive relay." },
+  { t: "00:00", title: "You press Call", body: "Sampark opens the line. The first sentence names you as an assistive relay." },
   { t: "00:18", title: "The clerk is captioned", body: "You read the line, tap a reply suggestion, and press Send." },
   { t: "02:46", title: "Complaint number received", body: "Pin it when you hear it. The outcome card keeps that number on top." },
 ];

@@ -9,4 +9,4 @@ One screenshot set per IBM Bob session. Name files like:
 - `05-tanis-final-review.png`
 
 Capture: the prompt you gave Bob, its plan, and the final diff. These are the judging
-evidence that IBM Bob built the IBM spine of Setu. Never claim Bob work without a file here.
+evidence that IBM Bob built the IBM spine of Sampark. Never claim Bob work without a file here.
