@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CallRoom, type CallRoomMessage } from "@/lib/transport/CallRoom";
 import CaptionFeed from "@/components/CaptionFeed";
 import DTMFPad from "@/components/DTMFPad";
 import ISLAvatar from "@/components/ISLAvatar";
@@ -59,8 +61,10 @@ export default function CallPage() {
     () => undefined
   );
   const connectingRef = useRef(false);
+  const roomRef = useRef<CallRoom | null>(null);
 
   const [ready, setReady] = useState(false);
+  const [clerkPeerConnected, setClerkPeerConnected] = useState(false);
   const [lineState, setLineState] = useState<RingState>("disconnected");
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [clerkDraft, setClerkDraft] = useState("");
@@ -183,7 +187,41 @@ export default function CallPage() {
     });
     void bootLiveCaptions();
 
+    const room = new CallRoom("demo-room", "user");
+    roomRef.current = room;
+
+    room.send({
+      type: "session-sync",
+      callerName: profile.name,
+      playbookId: session.playbookId,
+      callLanguage: session.callLanguage,
+      facts: session.facts ?? {},
+    });
+
+    const unsubRoom = room.onMessage((msg: CallRoomMessage) => {
+      if (msg.type === "clerk-caption") {
+        if (msg.text) {
+          ingestRef.current(msg.text, false);
+        }
+      } else if (msg.type === "peer-joined" || msg.type === "room-joined") {
+        setClerkPeerConnected(true);
+        room.send({
+          type: "session-sync",
+          callerName: profile.name,
+          playbookId: session.playbookId,
+          callLanguage: session.callLanguage,
+          facts: session.facts ?? {},
+        });
+      } else if (msg.type === "peer-left") {
+        setClerkPeerConnected(false);
+      } else if (msg.type === "call-ended") {
+        endCall();
+      }
+    });
+
     return () => {
+      unsubRoom();
+      room.disconnect();
       unsubscribe();
       unsubAudioRef.current?.();
       unsubAudioRef.current = null;
@@ -355,6 +393,12 @@ export default function CallPage() {
       redacted: false,
     });
 
+    roomRef.current?.send({
+      type: "user-tts",
+      text: selected.sentence,
+      timestamp: Date.now(),
+    });
+
     const transport = transportRef.current;
     if (!transport) return;
 
@@ -386,6 +430,11 @@ export default function CallPage() {
 
   function handleDtmf(key: string) {
     transportRef.current?.sendDTMF(key);
+    roomRef.current?.send({
+      type: "dtmf",
+      digit: key,
+      timestamp: Date.now(),
+    });
     pushEntry({
       t: Date.now(),
       side: "us",
@@ -417,6 +466,11 @@ export default function CallPage() {
   }
 
   function endCall(asRefused = false) {
+    roomRef.current?.send({
+      type: "call-ended",
+      timestamp: Date.now(),
+    });
+
     const session = loadCallSession();
     if (!session) {
       router.replace("/start");
@@ -565,21 +619,58 @@ export default function CallPage() {
         ) : null}
       </section>
 
-      <form onSubmit={addClerkCaption} className="mt-4 flex gap-2">
-        <label className="sr-only" htmlFor="clerk-line">
-          {t("call.clerk_input_label")}
-        </label>
-        <input
-          id="clerk-line"
-          value={clerkDraft}
-          onChange={(e) => setClerkDraft(e.target.value)}
-          placeholder={t("call.clerk_input_placeholder")}
-          className="field flex-1"
-        />
-        <button type="submit" className="ghost-btn min-h-14 px-5">
-          {t("call.add_caption")}
-        </button>
-      </form>
+      {/* Clerk Operator Status & Direct Sync Bar */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-card px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2.5 text-xs">
+          <span className="relative flex h-2.5 w-2.5">
+            <span
+              className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+                clerkPeerConnected ? "bg-emerald-400" : "bg-teal-400"
+              }`}
+            />
+            <span
+              className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                clerkPeerConnected ? "bg-emerald-500" : "bg-teal-500"
+              }`}
+            />
+          </span>
+          <span className="font-semibold text-ink">
+            {clerkPeerConnected ? "Clerk Desk Online & Synchronized" : "Waiting for Clerk Desk..."}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/clerk"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--signal)] bg-[rgba(14,124,114,0.08)] px-3 py-1.5 text-xs font-semibold text-[var(--signal)] hover:bg-[rgba(14,124,114,0.15)] transition-colors"
+          >
+            <span>Open Clerk Operator Console ↗</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Developer / Quick Demo Simulation Drawer (Collapsible) */}
+      <details className="mt-2 text-xs text-[var(--muted)]">
+        <summary className="cursor-pointer hover:text-ink select-none py-1">
+          Single-screen testing? Click to type manual clerk line
+        </summary>
+        <form onSubmit={addClerkCaption} className="mt-2 flex gap-2">
+          <label className="sr-only" htmlFor="clerk-line">
+            {t("call.clerk_input_label")}
+          </label>
+          <input
+            id="clerk-line"
+            value={clerkDraft}
+            onChange={(e) => setClerkDraft(e.target.value)}
+            placeholder={t("call.clerk_input_placeholder")}
+            className="field flex-1"
+          />
+          <button type="submit" className="ghost-btn min-h-12 px-4">
+            {t("call.add_caption")}
+          </button>
+        </form>
+      </details>
 
       <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
         {updatingReplies ? (

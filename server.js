@@ -139,11 +139,70 @@ app.prepare().then(() => {
     });
   });
 
+  const roomWss = new WebSocketServer({ noServer: true });
+  const rooms = new Map();
+
+  roomWss.on("connection", (ws, req) => {
+    const parsedUrl = parse(req.url, true);
+    const roomId = (parsedUrl.query.room || "demo-room").toString();
+    const role = (parsedUrl.query.role || "unknown").toString();
+
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, new Set());
+    }
+    const clients = rooms.get(roomId);
+    clients.add(ws);
+    ws.roomId = roomId;
+    ws.role = role;
+
+    try {
+      ws.send(JSON.stringify({ type: "room-joined", roomId, role, clientCount: clients.size }));
+    } catch {}
+
+    for (const client of clients) {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify({ type: "peer-joined", role, clientCount: clients.size }));
+        } catch {}
+      }
+    }
+
+    ws.on("message", (raw) => {
+      const msgStr = raw.toString();
+      for (const client of clients) {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+          try {
+            client.send(msgStr);
+          } catch {}
+        }
+      }
+    });
+
+    ws.on("close", () => {
+      clients.delete(ws);
+      if (clients.size === 0) {
+        rooms.delete(roomId);
+      } else {
+        for (const client of clients) {
+          if (client.readyState === WebSocket.OPEN) {
+            try {
+              client.send(JSON.stringify({ type: "peer-left", role, clientCount: clients.size }));
+            } catch {}
+          }
+        }
+      }
+    });
+  });
+
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url);
     if (pathname === "/api/stt-fallback") {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
+      });
+    } else if (pathname === "/api/room-relay") {
+      roomWss.handleUpgrade(req, socket, head, (ws) => {
+        roomWss.emit("connection", ws, req);
       });
     }
     // Do not destroy other upgrades (Next.js HMR).
