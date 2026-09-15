@@ -363,9 +363,30 @@ export default function ClerkPage() {
               <strong className="text-amber-300 font-semibold">{playbookName}</strong>
             </div>
 
-            <div>
-              <span className="text-slate-400">Call Lang:</span>{" "}
-              <strong className="text-teal-300 font-semibold uppercase">{callLanguage}</strong>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Call Lang:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextLang = callLanguage === "hi" ? "en" : "hi";
+                  setCallLanguage(nextLang);
+                  roomRef.current?.send({
+                    type: "session-sync",
+                    callerName,
+                    playbookId: playbookName.toLowerCase().includes("power")
+                      ? "power-cut"
+                      : playbookName.toLowerCase().includes("bank")
+                      ? "bank"
+                      : "hospital",
+                    callLanguage: nextLang,
+                    facts: {},
+                  });
+                }}
+                className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-teal-300 hover:border-teal-500 hover:text-white transition-colors"
+                title="Click to toggle operator language"
+              >
+                {callLanguage === "hi" ? "हिन्दी (HI) ⇄" : "English (EN) ⇄"}
+              </button>
             </div>
 
             <div className="text-slate-400">

@@ -17,7 +17,7 @@ import { keytermsFromFacts } from "@/lib/elevenlabs/scribe";
 import { containsSensitiveCode } from "@/lib/guard/otp";
 import { redact } from "@/lib/guard/redact";
 import { detectReferenceNumbers } from "@/lib/guard/refnum";
-import { applyUiLanguage, t } from "@/lib/i18n";
+import { applyUiLanguage, t, UI_LANGUAGES } from "@/lib/i18n";
 import { decideCallOutcome } from "@/lib/outcome/decide";
 import { detectRefusal } from "@/lib/outcome/refuse";
 import { getPlaybook, playbookTitle } from "@/lib/playbooks";
@@ -38,7 +38,12 @@ import {
 } from "@/lib/suggestions/skeleton";
 import { RoomTransport } from "@/lib/transport/RoomTransport";
 import { createSTTWithFallback } from "@/lib/watson-stt/autoswitch";
-import type { AccessNeed, ReplySuggestion, TranscriptEntry } from "@/lib/types";
+import type {
+  AccessNeed,
+  ReplySuggestion,
+  TranscriptEntry,
+  UiLanguage,
+} from "@/lib/types";
 
 const LINE_LABEL = {
   active: "call.line_active",
@@ -77,7 +82,7 @@ export default function CallPage() {
   const [name, setName] = useState("");
   const [accessNeed, setAccessNeed] = useState<AccessNeed>("both");
   const [facts, setFacts] = useState<Record<string, string>>({});
-  const [uiLanguage, setUiLanguage] = useState("en");
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
   const [callLanguage, setCallLanguage] = useState<"hi" | "en">("hi");
   const [playbookId, setPlaybookId] = useState("power-cut");
   const [playbookName, setPlaybookName] = useState("Power cut");
@@ -465,6 +470,36 @@ export default function CallPage() {
     setHeardRef(null);
   }
 
+  function handleSwitchCallLanguage(newLang: "hi" | "en") {
+    if (newLang === callLanguage) return;
+    setCallLanguage(newLang);
+    const session = loadCallSession();
+    if (session) {
+      saveCallSession({ ...session, callLanguage: newLang });
+    }
+    if (!entries.length || selected?.id === "disclosure") {
+      setSelected(disclosureSuggestion(name, newLang, accessNeed));
+    }
+    roomRef.current?.send({
+      type: "session-sync",
+      callerName: name,
+      playbookId,
+      callLanguage: newLang,
+      facts,
+    });
+  }
+
+  function handleSwitchUiLanguage(newLang: UiLanguage) {
+    applyUiLanguage(newLang);
+    setUiLanguage(newLang);
+    const profile = loadProfile();
+    saveProfile({ ...profile, uiLanguage: newLang });
+    const playbook = getPlaybook(playbookId);
+    if (playbook) {
+      setPlaybookName(playbookTitle(playbook, newLang));
+    }
+  }
+
   function endCall(asRefused = false) {
     roomRef.current?.send({
       type: "call-ended",
@@ -549,6 +584,66 @@ export default function CallPage() {
           </button>
         </div>
       </header>
+
+      {/* Dynamic In-Call Language Switcher Bar */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-card/90 backdrop-blur-sm px-4 py-2.5 shadow-sm animate-fade-up">
+        {/* Spoken Call Language Toggle */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1">
+            <span>🗣️</span>
+            <span>Spoken:</span>
+          </span>
+          <div className="inline-flex rounded-full bg-paper p-0.5 border border-[var(--border)]">
+            <button
+              type="button"
+              id="switch-call-hi"
+              onClick={() => handleSwitchCallLanguage("hi")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                callLanguage === "hi"
+                  ? "bg-ink text-paper shadow-sm"
+                  : "text-[var(--muted)] hover:text-ink"
+              }`}
+            >
+              हिन्दी (Hindi)
+            </button>
+            <button
+              type="button"
+              id="switch-call-en"
+              onClick={() => handleSwitchCallLanguage("en")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                callLanguage === "en"
+                  ? "bg-ink text-paper shadow-sm"
+                  : "text-[var(--muted)] hover:text-ink"
+              }`}
+            >
+              English
+            </button>
+          </div>
+        </div>
+
+        {/* UI Display Language Selector */}
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+          <span className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1 mr-1">
+            <span>🌐</span>
+            <span>UI:</span>
+          </span>
+          {UI_LANGUAGES.map((lang) => (
+            <button
+              key={lang.id}
+              type="button"
+              id={`switch-ui-${lang.id}`}
+              onClick={() => handleSwitchUiLanguage(lang.id)}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium transition-all ${
+                uiLanguage === lang.id
+                  ? "bg-[var(--signal)] text-white font-semibold shadow-sm"
+                  : "bg-paper text-[var(--muted)] border border-[var(--border)] hover:text-ink hover:border-[var(--signal)]"
+              }`}
+            >
+              {lang.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {micNeeded ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-raised px-4 py-3">
