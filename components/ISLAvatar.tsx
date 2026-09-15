@@ -81,19 +81,22 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
   // Sequential multi-sign animator
   function playSequence(words: string[]) {
-    if (words.length === 0) return;
+    // Filter out isolated letters to prioritize full word signs (unless digits)
+    const signWords = words.filter((w) => w.length > 1 || /\d/.test(w));
+    const targetWords = signWords.length > 0 ? signWords : words.slice(0, 4);
+    if (targetWords.length === 0) return;
     if (timerRef.current) clearInterval(timerRef.current);
 
-    setSequence(words);
+    setSequence(targetWords);
     let idx = 0;
 
     const playStep = (i: number) => {
-      if (i >= words.length) {
+      if (i >= targetWords.length) {
         if (timerRef.current) clearInterval(timerRef.current);
         setActiveIndex(null);
         return;
       }
-      const w = words[i].toUpperCase();
+      const w = targetWords[i].toUpperCase();
       setActiveWord(w);
       setActiveIndex(i);
       void playSignWord(w);
@@ -103,14 +106,14 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     idx = 1;
 
     timerRef.current = setInterval(() => {
-      if (idx >= words.length) {
+      if (idx >= targetWords.length) {
         if (timerRef.current) clearInterval(timerRef.current);
         setActiveIndex(null);
         return;
       }
       playStep(idx);
       idx += 1;
-    }, 2200);
+    }, 2600);
   }
 
   useEffect(() => {
@@ -135,13 +138,13 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
   return (
     <div
-      className={`relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-md ${
+      className={`relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-lg ${
         visible ? "" : "hidden"
       }`}
     >
-      {/* Avatar Viewport */}
-      <div className="relative aspect-video w-full overflow-hidden bg-black/40">
-        <div ref={slotRef} className="h-full w-full" />
+      {/* Avatar Viewport (Enlarged for clear visibility) */}
+      <div className="relative h-[340px] sm:h-[380px] md:h-[420px] w-full overflow-hidden bg-[#0c0e12] flex items-center justify-center">
+        <div ref={slotRef} className="h-full w-full flex items-center justify-center [&>div]:!h-full [&>div]:!w-full [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:!object-contain" />
 
         {status === "loading" && !isReady && (
           <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">

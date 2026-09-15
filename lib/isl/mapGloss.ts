@@ -132,11 +132,13 @@ function stripCodes(text: string): string {
   return next.replace(/\b\d{3,}\b/g, " ");
 }
 
-function emit(word: string, out: string[]): void {
+function emit(word: string, out: string[], allowSpell = true): void {
   const result = lemmasForWord(normalizeToken(word));
   if (result === "drop") return;
   if (result === "spell") {
-    out.push(...fingerspell(word));
+    if (allowSpell) {
+      out.push(...fingerspell(word));
+    }
     return;
   }
   for (const lemma of result) out.push(toGlossToken(lemma));
@@ -159,22 +161,27 @@ function keepForSecondPass(token: string): boolean {
   return true;
 }
 
-/** Map Llama (or any) gloss tokens onto signs that exist. Last resort: fingerspell. */
-export function alignGlossToCatalog(tokens: string[]): string[] {
+/** Map Llama (or any) gloss tokens onto signs that exist. Last resort: fingerspell (if allowed). */
+export function alignGlossToCatalog(tokens: string[], allowSpell = true): string[] {
   const cleaned = tokens.map(normalizeToken).filter(Boolean);
   const pass1 = applyPhrasesToTokens(cleaned);
   const pass2 = applyPhrasesToTokens(pass1.filter(keepForSecondPass));
   const out: string[] = [];
-  for (const token of pass2) emit(token, out);
+  for (const token of pass2) emit(token, out, allowSpell);
   return uniqueAdjacent(out);
 }
 
-/** Deterministic caption → gloss. Used when Llama is down, and for the playbook exam. */
+/** Deterministic caption → gloss. Prioritizes clear sign words rather than letter-by-letter spelling. */
 export function captionToGloss(text: string): string[] {
   const stripped = stripCodes(text);
   const rewritten = applyPhrasesToText(stripped);
   const tokens = rewritten.split(/[\s,./:;!?|]+/).filter(Boolean);
-  return alignGlossToCatalog(tokens);
+  const result = alignGlossToCatalog(tokens, false);
+  // If no direct words were matched and text has short single-word token, fallback to spelling
+  if (result.length === 0 && tokens.length === 1 && tokens[0].length <= 5) {
+    return alignGlossToCatalog(tokens, true);
+  }
+  return result;
 }
 
 export function scoreGloss(tokens: string[]): {

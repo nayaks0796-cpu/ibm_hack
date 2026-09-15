@@ -12,7 +12,6 @@ import RefusedOutcomeBanner from "@/components/RefusedOutcomeBanner";
 import ReplySuggestions from "@/components/ReplySuggestions";
 import SilenceRing, { type RingState } from "@/components/SilenceRing";
 import SilentClerkBanner from "@/components/SilentClerkBanner";
-import UnmuteButton from "@/components/UnmuteButton";
 import { keytermsFromFacts } from "@/lib/elevenlabs/scribe";
 import { containsSensitiveCode } from "@/lib/guard/otp";
 import { redact } from "@/lib/guard/redact";
@@ -32,7 +31,9 @@ import {
   saveProfile,
 } from "@/lib/store";
 import {
+  accessNeedPhrase,
   alwaysPresentSuggestions,
+  detectClerkIntent,
   disclosureSuggestion,
   finalizeReplySuggestions,
 } from "@/lib/suggestions/skeleton";
@@ -62,7 +63,6 @@ export default function CallPage() {
   const cancelSpeakRef = useRef<(() => void) | null>(null);
   const sttRef = useRef<SttController | null>(null);
   const unsubAudioRef = useRef<(() => void) | null>(null);
-  const unmutedRef = useRef(false);
   const ingestRef = useRef<(text: string, fromVoice: boolean) => void>(
     () => undefined
   );
@@ -75,11 +75,26 @@ export default function CallPage() {
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [clerkDraft, setClerkDraft] = useState("");
   const [selected, setSelected] = useState<ReplySuggestion | null>(null);
+  const [draftSentence, setDraftSentence] = useState("");
+  const [originalSentence, setOriginalSentence] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const isEditingRef = useRef(false);
+  isEditingRef.current = isEditing;
+
+  const [autoPilot, setAutoPilot] = useState(true);
+  const autoPilotRef = useRef(true);
+  autoPilotRef.current = autoPilot;
+
+  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
+  const autoTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [needsIntervention, setNeedsIntervention] = useState(false);
+  const [interventionReason, setInterventionReason] = useState("");
+  const [userBrief, setUserBrief] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [heardRef, setHeardRef] = useState<string | null>(null);
   const [showKeypad, setShowKeypad] = useState(false);
   const [showIsl, setShowIsl] = useState(true);
-  const [unmuted, setUnmuted] = useState(false);
   const [name, setName] = useState("");
   const [accessNeed, setAccessNeed] = useState<AccessNeed>("both");
   const [facts, setFacts] = useState<Record<string, string>>({});
@@ -179,9 +194,28 @@ export default function CallPage() {
       playbook?.goal[session.callLanguage] ?? playbook?.goal.en ?? ""
     );
     setEntries(loadCurrentTranscript());
-    setSelected(
-      disclosureSuggestion(profile.name, session.callLanguage, profile.accessNeed)
-    );
+
+    const brief = session.userBrief?.trim();
+    setUserBrief(brief || "");
+
+    let initialSug: ReplySuggestion;
+    if (brief) {
+      const initialSentence =
+        session.callLanguage === "hi"
+          ? `नमस्ते, मैं ${profile.name} बोल रहा हूँ। ${accessNeedPhrase(profile.accessNeed, "hi")}। ${brief}`
+          : `Hello, my name is ${profile.name}. ${accessNeedPhrase(profile.accessNeed, "en")}. ${brief}`;
+      initialSug = {
+        id: "brief-intro",
+        label: t("call.suggest.state_issue") || "Initial Statement",
+        sentence: initialSentence,
+      };
+    } else {
+      initialSug = disclosureSuggestion(profile.name, session.callLanguage, profile.accessNeed);
+    }
+
+    setSelected(initialSug);
+    setDraftSentence(initialSug.sentence);
+    setOriginalSentence(initialSug.sentence);
     setReady(true);
 
     const transport = transportRef.current;
@@ -218,6 +252,10 @@ export default function CallPage() {
           callLanguage: session.callLanguage,
           facts: session.facts ?? {},
         });
+      } else if (msg.type === "session-sync") {
+        if (msg.callLanguage && (msg.callLanguage === "en" || msg.callLanguage === "hi")) {
+          setCallLanguage(msg.callLanguage);
+        }
       } else if (msg.type === "peer-left") {
         setClerkPeerConnected(false);
       } else if (msg.type === "call-ended") {
@@ -298,7 +336,7 @@ export default function CallPage() {
     const cleaned = text.trim();
     if (!cleaned) return;
 
-    const asUser = fromVoice && unmutedRef.current;
+    const asUser = false;
     const stored = pushEntry({
       t: Date.now(),
       side: asUser ? "us" : "clerk",
@@ -308,9 +346,42 @@ export default function CallPage() {
     });
 
     if (!asUser) {
-      setSelected(null);
-      setBlocked(false);
-      setLlmSuggestions([]);
+      if (!isEditingRef.current) {
+        setSelected(null);
+        setBlocked(false);
+        setLlmSuggestions([]);
+
+        // Detect if clerk asked for missing fact
+        const intent = detectClerkIntent(cleaned);
+        if (intent === "ask-id" && !facts.consumer_number && !facts.meter_number && !facts.account_number) {
+          setNeedsIntervention(true);
+          setInterventionReason(
+            callLanguage === "hi"
+              ? "ऑपरेटर ने उपभोक्ता / मीटर संख्या पूछी है जो उपलब्ध नहीं है। कृपया नीचे लिखें या चुनें।"
+              : "Operator asked for your Consumer / Meter Number. Please provide or select below."
+          );
+          if (autoTimerRef.current) {
+            clearInterval(autoTimerRef.current);
+            autoTimerRef.current = null;
+          }
+          setAutoCountdown(null);
+        } else if (intent === "ask-place" && !facts.area) {
+          setNeedsIntervention(true);
+          setInterventionReason(
+            callLanguage === "hi"
+              ? "ऑपरेटर ने आपका इलाका / क्षेत्र पूछा है। कृपया नीचे लिखें या चुनें।"
+              : "Operator asked for your locality / area. Please provide or select below."
+          );
+          if (autoTimerRef.current) {
+            clearInterval(autoTimerRef.current);
+            autoTimerRef.current = null;
+          }
+          setAutoCountdown(null);
+        } else {
+          setNeedsIntervention(false);
+          setInterventionReason("");
+        }
+      }
     }
 
     if (!asUser && detectRefusal(cleaned)) {
@@ -348,6 +419,14 @@ export default function CallPage() {
             !item.id.startsWith("always-")
         );
         setLlmSuggestions(next);
+        if (!isEditingRef.current && next[0]) {
+          setSelected(next[0]);
+          setDraftSentence(next[0].sentence);
+          setOriginalSentence(next[0].sentence);
+          if (autoPilotRef.current && !needsIntervention) {
+            triggerAutoSpeak(next[0].sentence, 2.5);
+          }
+        }
       })
       .catch(() => {
         // Keep hardcoded reply suggestions if the LLM is offline.
@@ -372,6 +451,72 @@ export default function CallPage() {
 
   ingestRef.current = (text, fromVoice) => ingestCaption(text, fromVoice);
 
+  function triggerAutoSpeak(sentence: string, delaySec = 2.5) {
+    if (!autoPilotRef.current || isEditingRef.current || needsIntervention) return;
+    if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+
+    setAutoCountdown(delaySec);
+    const started = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - started) / 1000;
+      const remaining = Math.max(0, +(delaySec - elapsed).toFixed(1));
+      setAutoCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        autoTimerRef.current = null;
+        setAutoCountdown(null);
+        if (autoPilotRef.current && !isEditingRef.current) {
+          void handleSend(sentence);
+        }
+      }
+    }, 100);
+    autoTimerRef.current = interval;
+  }
+
+  function handleReframe(type: "urgent" | "polite" | "concise") {
+    if (autoTimerRef.current) {
+      clearInterval(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+    setAutoCountdown(null);
+    setIsEditing(true);
+    isEditingRef.current = true;
+
+    const base = (draftSentence || selected?.sentence || "").trim();
+    if (!base) return;
+
+    if (type === "urgent") {
+      if (callLanguage === "hi") {
+        setDraftSentence(`यह अत्यंत आवश्यक और आपातकालीन मामला है, कृपया तुरंत संज्ञान लें: ${base}`);
+      } else {
+        setDraftSentence(`This is extremely urgent, please prioritize this immediately: ${base}`);
+      }
+    } else if (type === "polite") {
+      if (callLanguage === "hi") {
+        setDraftSentence(`नमस्ते, आपसे विनम्र अनुरोध है कि इसमें मेरी सहायता करें: ${base} धन्यवाद।`);
+      } else {
+        setDraftSentence(`Hello, kindly request your assistance with this matter: ${base} Thank you.`);
+      }
+    } else if (type === "concise") {
+      const cleaned = base
+        .replace(/^(hello|hi|namaste|please|kindly)[,\s]*/i, "")
+        .replace(/thank you.*$/i, "")
+        .trim();
+      setDraftSentence(cleaned.length > 5 ? cleaned : base);
+    }
+  }
+
+  function handleResetDraft() {
+    if (autoTimerRef.current) {
+      clearInterval(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+    setAutoCountdown(null);
+    setDraftSentence(originalSentence || selected?.sentence || "");
+    setIsEditing(false);
+    isEditingRef.current = false;
+  }
+
   function addClerkCaption(event: FormEvent) {
     event.preventDefault();
     const text = clerkDraft.trim();
@@ -380,16 +525,26 @@ export default function CallPage() {
     ingestCaption(text, false);
   }
 
-  async function handleSend() {
-    if (!selected) return;
+  async function handleSend(customText?: string) {
+    if (autoTimerRef.current) {
+      clearInterval(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+    setAutoCountdown(null);
 
-    if (containsSensitiveCode(selected.sentence)) {
+    const text = (customText || draftSentence || selected?.sentence || "").trim();
+    if (!text) return;
+
+    if (containsSensitiveCode(text)) {
       setBlocked(true);
       transportRef.current?.stopSpeaking();
       return;
     }
 
     setBlocked(false);
+    setIsEditing(false);
+    isEditingRef.current = false;
+    setNeedsIntervention(false);
 
     const msgId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
@@ -397,13 +552,13 @@ export default function CallPage() {
       t: Date.now(),
       side: "us",
       source: "tts-sent",
-      text: selected.sentence,
+      text,
       redacted: false,
     });
 
     roomRef.current?.send({
       type: "user-tts",
-      text: selected.sentence,
+      text,
       timestamp: Date.now(),
       msgId,
     });
@@ -411,7 +566,7 @@ export default function CallPage() {
     void fetch("/api/gloss", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: selected.sentence }),
+      body: JSON.stringify({ text }),
     })
       .then((res) => res.json())
       .then((data: { gloss?: string[] }) => {
@@ -429,7 +584,7 @@ export default function CallPage() {
 
     try {
       const cancel = await transport.speak(
-        selected.sentence,
+        text,
         callLanguage,
         loadProfile().voice
       );
@@ -441,15 +596,17 @@ export default function CallPage() {
     }
   }
 
-  function handleUnmute() {
-    transportRef.current?.stopSpeaking();
-    cancelSpeakRef.current = null;
-    setUnmuted((current) => {
-      const next = !current;
-      unmutedRef.current = next;
-      return next;
-    });
-  }
+  useEffect(() => {
+    if (!isEditingRef.current && contextual.length > 0 && (!selected || !draftSentence)) {
+      const top = contextual[0];
+      setSelected(top);
+      setDraftSentence(top.sentence);
+      setOriginalSentence(top.sentence);
+      if (autoPilotRef.current && !needsIntervention) {
+        triggerAutoSpeak(top.sentence, 2.5);
+      }
+    }
+  }, [contextual, needsIntervention]);
 
   function handleDtmf(key: string) {
     transportRef.current?.sendDTMF(key);
@@ -583,7 +740,7 @@ export default function CallPage() {
   return (
     <main
       key={`${uiLanguage}-${callLanguage}`}
-      className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-5 sm:px-6"
+      className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-6"
     >
       <header className="flex items-center justify-between gap-3 animate-fade-up">
         <div className="flex items-center gap-3">
@@ -608,6 +765,30 @@ export default function CallPage() {
               {t("call.demo_voice")}
             </span>
           ) : null}
+          <button
+            type="button"
+            id="call-autopilot-toggle"
+            onClick={() => {
+              const next = !autoPilot;
+              setAutoPilot(next);
+              autoPilotRef.current = next;
+              if (!next) {
+                if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+                autoTimerRef.current = null;
+                setAutoCountdown(null);
+              } else if (selected && !needsIntervention && !isEditing) {
+                triggerAutoSpeak(draftSentence || selected.sentence, 2.5);
+              }
+            }}
+            aria-pressed={autoPilot}
+            className={`min-h-11 rounded-full px-3.5 text-xs font-semibold transition-all ${
+              autoPilot
+                ? "bg-teal-600 text-white shadow-sm border border-teal-500"
+                : "border border-[var(--border)] bg-raised text-[var(--muted)]"
+            }`}
+          >
+            {autoPilot ? "🤖 Auto-Pilot: ON" : "👤 Auto-Pilot: PAUSED"}
+          </button>
           <button
             type="button"
             onClick={toggleIsl}
@@ -747,13 +928,13 @@ export default function CallPage() {
 
       <section
         className={`mt-4 grid min-h-0 flex-1 gap-4 ${
-          showIsl ? "md:grid-cols-[1fr_220px]" : ""
+          showIsl ? "md:grid-cols-[1fr_380px] lg:grid-cols-[1fr_420px]" : ""
         }`}
       >
         <CaptionFeed
           entries={entries}
           liveText={livePartial || (liveCaptions && !entries.length ? t("call.listening") : "")}
-          liveSide={unmuted ? "us" : "clerk"}
+          liveSide="clerk"
         />
         {showIsl ? (
           <div className="flex flex-col gap-2">
@@ -815,47 +996,184 @@ export default function CallPage() {
         </form>
       </details>
 
+      {/* Response Station & Auto-Pilot Engine */}
       <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
+        {/* Auto-Pilot Intervention Alert */}
+        {needsIntervention && (
+          <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <div>
+                <strong className="font-bold">Intervention Needed:</strong>
+                <p className="mt-0.5">{interventionReason}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Auto-Pilot Speaking Countdown Bar */}
+        {autoCountdown !== null && !needsIntervention && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-500/40 bg-teal-500/10 p-3 text-xs text-teal-900 dark:text-teal-200">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-teal-500" />
+              </span>
+              <div>
+                <span className="font-bold">🤖 Auto-Pilot speaking automatically in {autoCountdown}s</span>
+                <p className="text-[11px] opacity-80">Edit response below or select suggestion to pause.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (autoTimerRef.current) clearInterval(autoTimerRef.current);
+                  autoTimerRef.current = null;
+                  setAutoCountdown(null);
+                  setIsEditing(true);
+                  isEditingRef.current = true;
+                }}
+                className="rounded-lg bg-black/10 dark:bg-white/10 px-2.5 py-1 font-semibold hover:bg-black/20 transition-colors"
+              >
+                ⏸️ Pause
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSend()}
+                className="rounded-lg bg-teal-600 px-3 py-1 font-semibold text-white hover:bg-teal-500 shadow-sm transition-colors"
+              >
+                ⚡ Speak Now
+              </button>
+            </div>
+          </div>
+        )}
+
         {updatingReplies ? (
           <p className="mb-2 text-sm text-[var(--muted)]">
             {t("call.updating_suggestions")}
           </p>
         ) : null}
+
         <ReplySuggestions
           suggestions={contextual}
           alwaysPresent={alwaysPresent}
           selectedId={selected?.id ?? null}
           onSelect={(suggestion) => {
             setSelected(suggestion);
+            setDraftSentence(suggestion.sentence);
+            setOriginalSentence(suggestion.sentence);
             setBlocked(false);
+            setIsEditing(false);
+            isEditingRef.current = false;
+            setNeedsIntervention(false);
+            if (autoPilotRef.current) {
+              triggerAutoSpeak(suggestion.sentence, 2.5);
+            }
           }}
         />
 
-        <div className="mt-4 rounded-2xl bg-paper p-4">
+        {/* Live Editable Proposed Speech Area */}
+        <div className="mt-4 rounded-2xl bg-paper p-4 shadow-sm border border-[var(--border)]">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-semibold text-[var(--muted)] flex items-center gap-1.5">
+              <span>💬</span>
+              <span>{t("call.selected_hint")} (Editable)</span>
+            </span>
+            {isEditing ? (
+              <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300">
+                ✏️ Editing Active (Incoming captions locked)
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                ✨ Ready to speak
+              </span>
+            )}
+          </div>
+
           {blocked ? (
-            <p className="text-base font-semibold text-danger">
+            <p className="mt-2 text-base font-semibold text-danger">
               {t("call.otp_blocked")}
             </p>
           ) : (
-            <>
-              <p className="eyebrow">{t("call.selected_hint")}</p>
-              <p className="mt-2 font-serif text-2xl leading-snug">
-                {selected?.sentence ?? t("call.pick_suggestion")}
-              </p>
-            </>
+            <textarea
+              id="active-speech-draft"
+              value={draftSentence}
+              onChange={(e) => {
+                setDraftSentence(e.target.value);
+                setIsEditing(true);
+                isEditingRef.current = true;
+                if (autoTimerRef.current) {
+                  clearInterval(autoTimerRef.current);
+                  autoTimerRef.current = null;
+                }
+                setAutoCountdown(null);
+              }}
+              rows={3}
+              placeholder={t("call.pick_suggestion")}
+              className="field mt-2 w-full font-serif text-xl leading-snug resize-none rounded-xl p-3 border border-[var(--border)] bg-raised focus:bg-paper transition-colors"
+            />
           )}
+
+          {/* AI Reframe & Quick Style Tweaks */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border)]">
+            <span className="text-[11px] font-semibold text-[var(--muted)] mr-1">
+              ✨ Reframe:
+            </span>
+            <button
+              type="button"
+              id="reframe-urgent-btn"
+              onClick={() => handleReframe("urgent")}
+              className="rounded-full bg-red-500/10 border border-red-500/25 px-2.5 py-1 text-xs font-semibold text-red-600 dark:text-red-300 hover:bg-red-500/20 transition-all"
+              title="Prepend emergency urgency to prioritize"
+            >
+              🚨 More Urgent
+            </button>
+            <button
+              type="button"
+              id="reframe-polite-btn"
+              onClick={() => handleReframe("polite")}
+              className="rounded-full bg-sky-500/10 border border-sky-500/25 px-2.5 py-1 text-xs font-semibold text-sky-600 dark:text-sky-300 hover:bg-sky-500/20 transition-all"
+              title="Add respectful greeting and assistance request"
+            >
+              🤝 More Polite
+            </button>
+            <button
+              type="button"
+              id="reframe-concise-btn"
+              onClick={() => handleReframe("concise")}
+              className="rounded-full bg-indigo-500/10 border border-indigo-500/25 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/20 transition-all"
+              title="Strip pleasantries into direct factual statement"
+            >
+              ⚡ Direct / Short
+            </button>
+
+            {isEditing && (
+              <button
+                type="button"
+                id="reset-draft-btn"
+                onClick={handleResetDraft}
+                className="ml-auto rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-all"
+                title="Revert back to AI suggested text"
+              >
+                🔄 Reset to AI Draft
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Primary Action Button */}
         <div className="mt-3 flex gap-2">
           <button
             type="button"
+            id="call-send-btn"
             onClick={() => void handleSend()}
-            disabled={!selected}
-            className="gold-btn min-h-16 flex-1 text-xl"
+            disabled={!draftSentence.trim()}
+            className="gold-btn min-h-16 flex-1 text-xl flex items-center justify-center gap-2"
           >
-            {t("call.send")}
+            <span>{t("call.send")}</span>
+            <span className="text-sm opacity-70">↵ Speak</span>
           </button>
-          <UnmuteButton unmuted={unmuted} onToggle={handleUnmute} />
         </div>
       </div>
 

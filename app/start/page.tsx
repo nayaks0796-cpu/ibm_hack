@@ -27,6 +27,7 @@ export default function StartPage() {
   const [playbookId, setPlaybookId] = useState("power-cut");
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
   const [islAvatar, setIslAvatar] = useState(true);
+  const [userBrief, setUserBrief] = useState("");
 
   useEffect(() => {
     const profile = loadProfile();
@@ -96,6 +97,7 @@ export default function StartPage() {
       pinnedReferenceNumber: null,
       facts: callFacts,
       islAvatar,
+      userBrief: userBrief.trim(),
     });
     void RoomTransport.requestMicAccess().catch(() => {
       // Call page will offer Allow microphone and keep the typed clerk line.
@@ -203,6 +205,36 @@ export default function StartPage() {
               );
             })}
           </div>
+        </section>
+
+        {/* Autonomous AI Relay Pre-Call Briefing Card */}
+        <section className="mt-8 rounded-2xl border border-[var(--border)] bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500/10 text-base text-teal-400">
+              🤖
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-ink">
+                {uiLanguage === "hi" ? "AI रिले एजेंट ब्रीफिंग (Auto-Pilot Brief)" : "AI Relay Agent Briefing (Auto-Pilot Brief)"}
+              </h2>
+              <p className="text-xs text-[var(--muted)]">
+                {uiLanguage === "hi"
+                  ? "कॉल शुरू होने से पहले अपने शब्दों में बताएं कि क्या बोलना है। आपका AI एजेंट अपने आप यह बात ऑपरेटर से कहेगा।"
+                  : "Brief what to speak about before the call starts. Your autonomous AI agent will speak this automatically upon connection."}
+              </p>
+            </div>
+          </div>
+          <textarea
+            value={userBrief}
+            onChange={(e) => setUserBrief(e.target.value)}
+            rows={3}
+            placeholder={
+              uiLanguage === "hi"
+                ? "उदा: 'इन्दिरा नगर 2nd स्टेज में दोपहर 2 बजे से बिजली कटी है, मीटर 994021। घर में मरीज है, तत्काल ठीक कराएं।'"
+                : "e.g. 'Report power outage in Sector 4 since 2 PM, meter 994021. Medical equipment in use, please expedite.'"
+            }
+            className="field mt-3 w-full text-sm resize-none rounded-xl"
+          />
         </section>
 
         <div className="mt-10 flex justify-end">

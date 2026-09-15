@@ -644,7 +644,15 @@ export default function ClerkPage() {
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder={isListening ? "Listening to your voice..." : "Type operator message or state query..."}
+                placeholder={
+                  isListening
+                    ? callLanguage === "hi"
+                      ? "आपकी आवाज़ सुन रहे हैं..."
+                      : "Listening to your voice..."
+                    : callLanguage === "hi"
+                    ? "ऑपरेटर संदेश लिखें या बोलें..."
+                    : "Type operator message or state query..."
+                }
                 className="flex-1 rounded-xl border border-slate-700 bg-[#080c10] px-4 text-sm text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               />
 
@@ -656,14 +664,16 @@ export default function ClerkPage() {
                 title="Repeat previous operator statement to caller"
               >
                 <span>🔁</span>
-                <span className="hidden sm:inline">Repeat</span>
+                <span className="hidden sm:inline">
+                  {callLanguage === "hi" ? "दोहराएं" : "Repeat"}
+                </span>
               </button>
 
               <button
                 type="submit"
                 className="rounded-xl bg-teal-600 px-5 text-sm font-semibold text-white shadow-md hover:bg-teal-500 active:scale-95 transition-all"
               >
-                Send
+                {callLanguage === "hi" ? "भेजें" : "Send"}
               </button>
             </form>
           </div>

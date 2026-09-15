@@ -18,6 +18,41 @@ declare global {
   }
 }
 
+// Suppress benign Animgen / jagid allocation notices from popping up in Next.js dev overlay
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "error",
+    (event) => {
+      const msg = event?.message ? String(event.message) : "";
+      if (
+        msg.includes("animgen") ||
+        msg.includes("jagid") ||
+        msg.includes("allcsa")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true
+  );
+
+  window.addEventListener(
+    "unhandledrejection",
+    (event) => {
+      const reason = event?.reason ? String(event.reason) : "";
+      if (
+        reason.includes("animgen") ||
+        reason.includes("jagid") ||
+        reason.includes("allcsa")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true
+  );
+}
+
 /** Same-origin proxy so avatar JARs and shaders are not blocked by CORS. */
 const JAS_BASE = "/api/jas/";
 const HOST_ID = "sampark-cwasa-host";
@@ -220,13 +255,25 @@ export async function glossToSigml(gloss: string[]): Promise<string> {
   return `<sigml>\n${parts.join("\n")}\n</sigml>`;
 }
 
+let sigmlTimer: any = null;
+
 export function playSigml(sigml: string): void {
   if (!window.CWASA || !/<hns_sign|<hamnosys/i.test(sigml)) return;
   try {
-    window.CWASA.stopSiGML(0);
-    window.CWASA.playSiGMLText(sigml, 0);
+    try {
+      window.CWASA.stopSiGML?.(0);
+    } catch {}
+
+    if (sigmlTimer) clearTimeout(sigmlTimer);
+    sigmlTimer = setTimeout(() => {
+      try {
+        window.CWASA?.playSiGMLText?.(sigml, 0);
+      } catch {
+        // Animgen throws if the avatar JAR is still loading; gloss still shows.
+      }
+    }, 60);
   } catch {
-    // Animgen throws if the avatar JAR is still loading; gloss still shows.
+    // Suppressed
   }
 }
 

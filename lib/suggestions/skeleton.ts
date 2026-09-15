@@ -160,7 +160,7 @@ export function isOffTask(caption: string, playbookId = "power-cut"): boolean {
   return words.length >= 3 || /\?/.test(caption);
 }
 
-function accessNeedPhrase(accessNeed: AccessNeed, callLanguage: CallLanguage): string {
+export function accessNeedPhrase(accessNeed: AccessNeed, callLanguage: CallLanguage): string {
   const give = giveFor(callLanguage);
   if (accessNeed === "hearing") {
     return give(

@@ -53,6 +53,8 @@ export interface CallSession {
   facts: Record<string, string>;
   /** Initial ISL preference for this call; can still toggle live. */
   islAvatar: boolean;
+  /** Caller briefing for the autonomous AI relay agent. */
+  userBrief?: string;
 }
 
 export interface ReplySuggestion {
