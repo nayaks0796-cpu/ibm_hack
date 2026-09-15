@@ -24,6 +24,8 @@ const SAMPLE_SIGNS = [
   { label: "Thank you", word: "THANKYOU" },
   { label: "Number", word: "NUMBER" },
   { label: "Hospital", word: "HOSPITAL" },
+  { label: "Please", word: "PLEASE" },
+  { label: "Problem", word: "PROBLEM" },
 ];
 
 export default function ISLAvatar({ gloss = [], visible = true }: Props) {
@@ -46,11 +48,20 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
       if (!cancelled) setStatus("ready");
     };
 
+    if (avatarCanvasReady()) markReady();
+
     const observer = new MutationObserver(() => {
       if (avatarCanvasReady()) markReady();
     });
     observer.observe(host, { childList: true, subtree: true });
-    if (avatarCanvasReady()) markReady();
+
+    // Active poll: WebGL canvas can mount asynchronously without triggering parent mutation
+    const pollId = setInterval(() => {
+      if (avatarCanvasReady()) {
+        markReady();
+        clearInterval(pollId);
+      }
+    }, 400);
 
     void bootCwasa()
       .then(markReady)
@@ -62,6 +73,7 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
     return () => {
       cancelled = true;
+      clearInterval(pollId);
       observer.disconnect();
       detachCwasaHost(slot);
     };
@@ -102,7 +114,8 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
   }
 
   useEffect(() => {
-    if (status !== "ready" || gloss.length === 0) return;
+    if ((status !== "ready" && !avatarCanvasReady()) || gloss.length === 0) return;
+    if (status !== "ready" && avatarCanvasReady()) setStatus("ready");
     playSequence(gloss);
 
     return () => {
@@ -118,6 +131,8 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     void playSignWord(upper);
   }
 
+  const isReady = status === "ready" || avatarCanvasReady();
+
   return (
     <div
       className={`relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-md ${
@@ -128,16 +143,31 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
       <div className="relative aspect-video w-full overflow-hidden bg-black/40">
         <div ref={slotRef} className="h-full w-full" />
 
-        {status === "loading" && (
+        {status === "loading" && !isReady && (
           <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">
             {t("call.isl_loading")}
           </p>
         )}
 
-        {status === "error" && (
-          <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold text-paper/80">
-            {t("call.isl_error")}
-          </p>
+        {status === "error" && !isReady && (
+          <div className="absolute inset-x-3 top-3 flex items-center justify-between rounded-lg bg-black/80 px-3 py-2 text-xs text-paper/90 border border-white/10">
+            <p>{t("call.isl_error")}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setStatus("loading");
+                void bootCwasa()
+                  .then(() => setStatus("ready"))
+                  .catch(() => {
+                    if (avatarCanvasReady()) setStatus("ready");
+                    else setStatus("error");
+                  });
+              }}
+              className="ml-2 rounded bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/30"
+            >
+              Retry
+            </button>
+          </div>
         )}
 
         {/* Current Active Sign Overlay */}

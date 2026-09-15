@@ -40,8 +40,9 @@ describe("CallRoom", () => {
     anyRoom.emit({ type: "user-tts", text: "Second", msgId: "unique-2" });
 
     expect(received.length).toBe(2);
-    expect(received[0].text).toBe("Hello");
-    expect(received[1].text).toBe("Second");
+    expect(received[0].type).toBe("user-tts");
+    expect((received[0] as { text: string }).text).toBe("Hello");
+    expect((received[1] as { text: string }).text).toBe("Second");
     room.disconnect();
   });
 });

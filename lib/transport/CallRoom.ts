@@ -23,11 +23,13 @@ export type CallRoomMessage = (
 
 export type MessageHandler = (msg: CallRoomMessage) => void;
 
+const GLOBAL_SEEN_MSG_IDS = new Set<string>();
+
 export class CallRoom {
   private ws: WebSocket | null = null;
   private channel: BroadcastChannel | null = null;
   private handlers = new Set<MessageHandler>();
-  private seenMsgIds = new Set<string>();
+  private storageHandler: ((e: StorageEvent) => void) | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   readonly roomId: string;
@@ -59,7 +61,7 @@ export class CallRoom {
   private initStorageFallback(): void {
     if (typeof window === "undefined") return;
     const storageKey = `sampark_event_${this.roomId}`;
-    window.addEventListener("storage", (e: StorageEvent) => {
+    this.storageHandler = (e: StorageEvent) => {
       if (e.key === storageKey && e.newValue) {
         try {
           const envelope = JSON.parse(e.newValue);
@@ -68,7 +70,8 @@ export class CallRoom {
           }
         } catch {}
       }
-    });
+    };
+    window.addEventListener("storage", this.storageHandler);
   }
 
   private connectWs(): void {
@@ -106,11 +109,11 @@ export class CallRoom {
 
   private emit(msg: CallRoomMessage): void {
     if (msg.msgId) {
-      if (this.seenMsgIds.has(msg.msgId)) return;
-      this.seenMsgIds.add(msg.msgId);
-      if (this.seenMsgIds.size > 300) {
-        const first = this.seenMsgIds.values().next().value;
-        if (first) this.seenMsgIds.delete(first);
+      if (GLOBAL_SEEN_MSG_IDS.has(msg.msgId)) return;
+      GLOBAL_SEEN_MSG_IDS.add(msg.msgId);
+      if (GLOBAL_SEEN_MSG_IDS.size > 500) {
+        const first = GLOBAL_SEEN_MSG_IDS.values().next().value;
+        if (first) GLOBAL_SEEN_MSG_IDS.delete(first);
       }
     }
 
@@ -127,8 +130,8 @@ export class CallRoom {
     if (!msg.msgId) {
       msg.msgId = `${this.role}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     }
-    // Prevent self-echo
-    this.seenMsgIds.add(msg.msgId);
+    // Prevent self-echo across any transport
+    GLOBAL_SEEN_MSG_IDS.add(msg.msgId);
 
     // If WebSocket is actively open, route via WebSocket exclusively to prevent duplicate channel delivery
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -176,6 +179,12 @@ export class CallRoom {
         this.channel.close();
       } catch {}
       this.channel = null;
+    }
+    if (typeof window !== "undefined" && this.storageHandler) {
+      try {
+        window.removeEventListener("storage", this.storageHandler);
+      } catch {}
+      this.storageHandler = null;
     }
     this.handlers.clear();
   }

@@ -37,6 +37,7 @@ import {
   finalizeReplySuggestions,
 } from "@/lib/suggestions/skeleton";
 import { RoomTransport } from "@/lib/transport/RoomTransport";
+import { tryClaimSpeech } from "@/lib/transport/speechLock";
 import { createSTTWithFallback } from "@/lib/watson-stt/autoswitch";
 import type {
   AccessNeed,
@@ -390,6 +391,8 @@ export default function CallPage() {
 
     setBlocked(false);
 
+    const msgId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
     pushEntry({
       t: Date.now(),
       side: "us",
@@ -402,6 +405,7 @@ export default function CallPage() {
       type: "user-tts",
       text: selected.sentence,
       timestamp: Date.now(),
+      msgId,
     });
 
     void fetch("/api/gloss", {
@@ -417,6 +421,9 @@ export default function CallPage() {
 
     const transport = transportRef.current;
     if (!transport) return;
+
+    // Single-speech guard across caller and clerk tabs on same computer
+    if (!tryClaimSpeech(msgId)) return;
 
     cancelSpeakRef.current = () => transport.stopSpeaking();
 
