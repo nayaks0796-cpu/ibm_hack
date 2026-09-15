@@ -21,7 +21,7 @@
     "mr": "तातडीची वैद्यकीय भेट किंवा आपत्कालीन खाट विचारणा",
     "bn": "জরুরি চিকিৎসা অ্যাপয়েন্টমেন্ট বা জরুরি শয্যা জিজ্ঞাসা"
   },
-  "defaultCallLanguage": "hi",
+  "defaultCallLanguage": "en",
   "facts": [
     {
       "key": "hospital_name",

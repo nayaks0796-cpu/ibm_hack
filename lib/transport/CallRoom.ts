@@ -2,7 +2,7 @@
 // Real-time synchronization layer between the User (/call) and Clerk (/clerk) interfaces.
 // Combines WebSocket relay (/api/room-relay) with BroadcastChannel cross-tab synchronization.
 
-export type CallRoomMessage =
+export type CallRoomMessage = (
   | { type: "clerk-caption"; text: string; isFinal?: boolean; timestamp?: number }
   | { type: "user-tts"; text: string; audioBase64?: string; timestamp?: number }
   | { type: "user-caption"; text: string; timestamp?: number }
@@ -18,7 +18,8 @@ export type CallRoomMessage =
   | { type: "call-ended"; timestamp?: number }
   | { type: "peer-joined"; role: string; clientCount?: number }
   | { type: "peer-left"; role: string; clientCount?: number }
-  | { type: "room-joined"; roomId: string; role: string; clientCount?: number };
+  | { type: "room-joined"; roomId: string; role: string; clientCount?: number }
+) & { msgId?: string };
 
 export type MessageHandler = (msg: CallRoomMessage) => void;
 
@@ -26,6 +27,7 @@ export class CallRoom {
   private ws: WebSocket | null = null;
   private channel: BroadcastChannel | null = null;
   private handlers = new Set<MessageHandler>();
+  private seenMsgIds = new Set<string>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   readonly roomId: string;
@@ -103,6 +105,15 @@ export class CallRoom {
   }
 
   private emit(msg: CallRoomMessage): void {
+    if (msg.msgId) {
+      if (this.seenMsgIds.has(msg.msgId)) return;
+      this.seenMsgIds.add(msg.msgId);
+      if (this.seenMsgIds.size > 300) {
+        const first = this.seenMsgIds.values().next().value;
+        if (first) this.seenMsgIds.delete(first);
+      }
+    }
+
     this.handlers.forEach((h) => {
       try {
         h(msg);
@@ -113,21 +124,29 @@ export class CallRoom {
   }
 
   send(msg: CallRoomMessage): void {
-    // 1. Send via WebSocket
+    if (!msg.msgId) {
+      msg.msgId = `${this.role}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    }
+    // Prevent self-echo
+    this.seenMsgIds.add(msg.msgId);
+
+    // If WebSocket is actively open, route via WebSocket exclusively to prevent duplicate channel delivery
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(msg));
+        return;
       } catch {}
     }
 
-    // 2. Send via BroadcastChannel for instant local cross-tab sync
+    // Fallback: send via BroadcastChannel for instant local cross-tab sync when WS not ready
     if (this.channel) {
       try {
         this.channel.postMessage(msg);
+        return;
       } catch {}
     }
 
-    // 3. Update localStorage fallback
+    // Fallback 3: localStorage event if neither WS nor BroadcastChannel are active
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(

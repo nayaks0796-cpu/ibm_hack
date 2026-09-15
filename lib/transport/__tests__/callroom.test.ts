@@ -24,4 +24,24 @@ describe("CallRoom", () => {
     unsubscribe();
     room.disconnect();
   });
+
+  test("deduplicates messages with the same msgId", () => {
+    const room = new CallRoom("test-room-dedup", "user");
+    const received: CallRoomMessage[] = [];
+    room.onMessage((msg) => {
+      received.push(msg);
+    });
+
+    // Access private emit via prototype or method call
+    const anyRoom = room as unknown as { emit: (msg: CallRoomMessage) => void };
+    anyRoom.emit({ type: "user-tts", text: "Hello", msgId: "unique-1" });
+    anyRoom.emit({ type: "user-tts", text: "Hello", msgId: "unique-1" }); // duplicate
+    anyRoom.emit({ type: "user-tts", text: "Hello", msgId: "unique-1" }); // triplicate
+    anyRoom.emit({ type: "user-tts", text: "Second", msgId: "unique-2" });
+
+    expect(received.length).toBe(2);
+    expect(received[0].text).toBe("Hello");
+    expect(received[1].text).toBe("Second");
+    room.disconnect();
+  });
 });

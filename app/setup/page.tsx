@@ -19,8 +19,8 @@ export default function SetupPage() {
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
-  const [callLanguage, setCallLanguage] = useState<CallLanguage>("hi");
-  const [voice, setVoice] = useState(defaultVoiceId("hi"));
+  const [callLanguage, setCallLanguage] = useState<CallLanguage>("en");
+  const [voice, setVoice] = useState(defaultVoiceId("en"));
   const [accessNeed, setAccessNeed] = useState<AccessNeed>("both");
 
   useEffect(() => {

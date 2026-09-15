@@ -21,7 +21,7 @@
     "mr": "अनधिकृत व्यवहाराची तक्रार करा किंवा कार्ड ब्लॉक करा",
     "bn": "অননুমোদিত লেনদেন জানান বা কার্ড ব্লক করুন"
   },
-  "defaultCallLanguage": "hi",
+  "defaultCallLanguage": "en",
   "facts": [
     {
       "key": "bank_name",

@@ -21,7 +21,7 @@
     "mr": "वीज कटौतीचा तक्रार क्रमांक मिळवा",
     "bn": "বিদ্যুৎ কাটার অভিযোগ নম্বর নিন"
   },
-  "defaultCallLanguage": "hi",
+  "defaultCallLanguage": "en",
   "facts": [
     {
       "key": "consumer_number",

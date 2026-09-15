@@ -86,7 +86,7 @@ export default function ClerkPage() {
   const [roomId, setRoomId] = useState("demo-room");
   const [callerName, setCallerName] = useState("Satya");
   const [playbookName, setPlaybookName] = useState("Power cut");
-  const [callLanguage, setCallLanguage] = useState<"hi" | "en">("hi");
+  const [callLanguage, setCallLanguage] = useState<"hi" | "en">("en");
   const [connected, setConnected] = useState(false);
   const [peerCount, setPeerCount] = useState(1);
   const [callActive, setCallActive] = useState(true);

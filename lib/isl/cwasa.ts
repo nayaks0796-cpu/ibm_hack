@@ -229,3 +229,29 @@ export function playSigml(sigml: string): void {
     // Animgen throws if the avatar JAR is still loading; gloss still shows.
   }
 }
+
+export async function playSignWord(word: string): Promise<boolean> {
+  const clean = word.trim();
+  if (!clean) return false;
+
+  const file = getSignFile(clean);
+  let xml: string | null = null;
+  if (file) {
+    xml = await fetchSignXml(file);
+  } else {
+    const parts: string[] = [];
+    for (const ch of clean.toUpperCase()) {
+      if (!/[A-Z0-9]/.test(ch)) continue;
+      const letterFile = getSignFile(ch) ?? `${ch}.sigml`;
+      const x = await fetchSignXml(letterFile);
+      if (x) parts.push(x);
+    }
+    if (parts.length > 0) xml = parts.join("\n");
+  }
+
+  if (xml) {
+    playSigml(`<sigml>\n${xml}\n</sigml>`);
+    return true;
+  }
+  return false;
+}

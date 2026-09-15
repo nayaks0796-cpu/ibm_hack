@@ -21,8 +21,8 @@ const LAST_OUTCOME_KEY = "setu:lastOutcome";
 const DEFAULT_PROFILE: UserProfile = {
   name: "",
   uiLanguage: "en",
-  callLanguage: "hi",
-  voice: defaultVoiceId("hi"),
+  callLanguage: "en",
+  voice: defaultVoiceId("en"),
   islAvatar: true,
   accessNeed: "both",
 };
