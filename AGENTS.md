@@ -1,7 +1,7 @@
 # AGENTS.md — The Sampark Contract
 
 Every agent (IBM Bob, Cursor, Antigravity) and every human on this team builds against this file.
-If a behaviour is not defined here, DO NOT invent it — ask Tanis.
+If a behaviour is not defined here, DO NOT invent it — ask Tanish M.
 
 ## What Sampark is
 
@@ -14,13 +14,20 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 
 ## The four hard rules (breaking any of these = the feature is wrong)
 
-1. **Nothing is spoken without Send.** The app never auto-replies. The user taps a reply
+1. **Nothing is spoken without Send**, except a scoped emergency exception.
+   The app never auto-replies on ordinary calls. The user taps a reply
    suggestion, sees the exact sentence, and taps Send. Only then does TTS speak.
-2. **OTP/PIN guard.** Sampark never speaks an OTP, PIN, CVV, or password through TTS, even if
-   asked. These are also redacted (shown as ••••) in the saved transcript.
-3. **The outcome card is the product.** After the call, the user sees ONE card: reference
-   number on top, result (resolved/refused/incomplete), time. Full transcript is available
-   behind a collapsed "View full conversation" — never the default view.
+   **Emergency exception (signed off):** for `emergency: true` playbooks only
+   (112 / 108 / 101), SOS may speak the opener once, and one-tap phrases may
+   speak immediately. The exact sentence is still shown. OTP/PIN/Aadhaar are
+   still never spoken. All other playbooks keep Send mandatory.
+2. **OTP/PIN/Aadhaar guard.** Sampark never speaks an OTP, PIN, CVV, password,
+   or Aadhaar number through TTS, even if asked. These are also redacted
+   (shown as ••••) in the saved transcript.
+3. **The outcome card is the product.** After the call, the user sees ONE card:
+   reference number **or** pinned answer **or** “help dispatched” on top, plus
+   result and time. Full transcript is available behind a collapsed
+   "View full conversation" — never the default view.
 4. **Transport abstraction.** All audio in/out goes through the `AudioTransport` interface.
    `RoomTransport` = mic/speaker (demo). `ExotelTransport` = real phone call (phase 2).
    No screen or component may talk to a mic, speaker, or phone API directly.
@@ -45,14 +52,16 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 - **Disclosure line.** First TTS line of every call includes: the user's name and
   "I am speaking through an assistive relay."
 - **Privacy.** All user data (facts, transcripts, outcomes) lives in localStorage/IndexedDB.
-  No accounts. No server-side database.
+  No accounts. No server-side database. Do **not** send past call transcripts to the LLM.
+  Each playbook may include a short `stages` map of typical next steps (hand-written).
+  That map is a shape, not a transcript: the model must not copy it, treat it as said,
+  or take numbers from it.
 
 ## The stack (locked — do not substitute)
 
 | Job | Service | Notes |
 |---|---|---|
-| Captions (STT) | ElevenLabs Scribe v2 Realtime (`scribe_v2_realtime`) | Hindi + English + mixed; keyterm prompting with user facts |
-| STT backup | IBM Watson STT (`hi-IN_Telephony` / `en-IN_Telephony`) | Auto-switch when ElevenLabs returns a quota/credit error; show "backup captions" note |
+| Captions (STT) | ElevenLabs Scribe v2 Realtime (`scribe_v2_realtime`) | Hindi + English + mixed; keyterm prompting with user facts. Only STT layer — if Scribe fails, show "captions off" and keep the typed clerk-line path. |
 | Speech out (TTS) | ElevenLabs (`eleven_flash_v2_5`, or `eleven_multilingual_v2` if latency allows) | One voice speaks both Hindi and English; server proxy only |
 | Last-resort TTS | Browser `speechSynthesis` | Only if ElevenLabs fails; show "demo voice" banner |
 | LLM | Llama 3.3 70B Instruct on IBM watsonx.ai | Reply suggestions, fact/number extraction, ISL gloss. Temperature ~0.2, JSON output only |
@@ -65,19 +74,19 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 
 ## The four screens
 
-1. **Setup (once)** — name; UI language (8); call language (hi/en); voice choice.
+1. **Setup (once)** — name; home location (for emergencies); UI language (8); call language (hi/en); voice choice.
    No playbook facts and no ISL toggle here.
-2. **Start a call** — situation cards (Power cut / Bank-1930 / Hospital); ISL avatar
-   on/off for this call; enter/confirm only that playbook's facts (prefilled from any
-   facts saved after a past call); big Call button. Facts for this call live on the
-   call session until the user opts to save them later.
-3. **Live call** — caption feed (clerk side + our side); ISL avatar panel with a
-   always-visible top-corner on/off control; 3–5 LLM reply suggestions + the 4
-   always-present ones; Send button showing the exact sentence; Unmute button;
-   DTMF keypad; silence indicator; pin-number confirmation banner.
-4. **Outcome card** — reference number, result, playbook name, duration; collapsed
-   "View full conversation" (redacted); optional "Save these facts for next time";
-   "New call" button. Saved on device.
+2. **Start a call** — SOS button (emergency, one tap); then 6 category tiles; situation
+   cards inside the category; ISL avatar on/off for this call; enter/confirm only that
+   playbook's facts; big Call button. Facts for this call live on the call session until
+   the user opts to save them later.
+3. **Live call** — caption feed (clerk/official + our side); in-person desk hint when
+   needed; ISL avatar panel; 3–5 LLM reply suggestions + the 4 always-present ones;
+   IVR digit suggestions that send DTMF; emergency one-tap phrases; Send button showing
+   the exact sentence; Unmute; DTMF keypad; silence indicator; pin-number or pin-answer banner.
+4. **Outcome card** — reference number **or** pinned answer **or** help dispatched, result,
+   playbook name, duration; collapsed "View full conversation" (redacted); optional
+   "Save these facts for next time"; "New call" button. Saved on device.
 
 ## Repo structure
 
@@ -90,10 +99,9 @@ setu/
     transport/            # AudioTransport interface, RoomTransport, ExotelTransport (stub)
     elevenlabs/           # scribe client (browser, token-based), tts client
     watsonx/              # Llama client: suggest(), extractFacts(), gloss()
-    watson-stt/           # backup STT client + auto-switch logic
     guard/                # OTP/PIN blocker, reference-number detector, redaction
     store/                # localStorage/IndexedDB helpers
-  server/                 # API routes: scribe-token, tts, suggest, gloss, stt-fallback
+  server/                 # API routes: scribe-token, tts, suggest, gloss
   public/isl/             # CWASA player + SiGML files (vendored)
   playbooks/              # power-cut.json, bank.json, hospital.json
   messages/               # i18n strings: en.json, hi.json, ta.json, te.json,
@@ -109,7 +117,6 @@ setu/
 - `POST /api/tts` body `{ text, lang }` → streamed audio. Must support immediate cancellation (barge-in).
 - `POST /api/suggest` body `{ caption, history, facts, goal, callLanguage }` → see JSON shape below.
 - `POST /api/gloss` body `{ text }` → `{ gloss: ["MORNING", "POWER", "CUT"] }` (English uppercase words for the ISL avatar).
-- `WS /api/stt-fallback` — Watson STT proxy, same message shape as the Scribe client emits, so the caption feed cannot tell which engine is on.
 
 ## JSON shapes (do not deviate)
 
@@ -121,6 +128,12 @@ setu/
   "title": { "en": "Power cut", "hi": "बिजली गुल" },
   "goal": { "en": "Get a complaint number for the power cut", "hi": "बिजली कटौती की शिकायत संख्या प्राप्त करें" },
   "defaultCallLanguage": "hi",
+  "category": "utility",
+  "channel": "phone-human",
+  "outcomeKind": "reference",
+  "stages": [
+    { "id": "intro", "en": "Introduce and say there is a power cut.", "hi": "परिचय दें और कहें कि बिजली गुल है।" }
+  ],
   "facts": [
     { "key": "consumer_number", "label": { "en": "Consumer number" }, "required": true },
     { "key": "area", "label": { "en": "Area / colony" }, "required": true },
@@ -161,14 +174,15 @@ setu/
   "transcript": []
 }
 ```
-`result`: `"resolved" | "refused" | "no-answer" | "incomplete"`.
+`result`: `"resolved" | "answered" | "refused" | "no-answer" | "incomplete"`.
+Optional `capturedAnswer` is a short clerk answer the user pinned (lab ready, bed free).
 `facts` are the playbook-scoped values used on that call. They are remembered across
 calls only if the user taps "Save these facts for next time" on the outcome screen.
 
 ## Guard rules (lib/guard)
 
 - **Block from TTS**: any digit sequence of 3+ within 40 chars after (case/lang-insensitive)
-  OTP / ओटीपी / PIN / पिन / CVV / password / पासवर्ड. Blocked send shows: "Sampark will not
+  OTP / ओटीपी / PIN / पिन / CVV / password / पासवर्ड / Aadhaar / आधार. Blocked send shows: "Sampark will not
   speak codes. Unmute to say it yourself."
 - **Reference-number detector**: patterns like `[A-Z]{2,6}[-/ ]?\d{4,12}`, standalone 6–13
   digit numbers following words like complaint/शिकायत/reference/ticket/registration.
@@ -182,25 +196,24 @@ WATSONX_API_KEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=https://us-south.ml.cloud.ibm.com
 WATSONX_MODEL=meta-llama/llama-3-3-70b-instruct
-WATSON_STT_API_KEY=
-WATSON_STT_URL=
 ```
 
 ## Build order (each step gated on the previous — see plan)
 
 1. Contract + scaffold → 2. Clickable skeleton (fake data) → 3. ISL avatar boots →
 4. Scribe captions → 5. ElevenLabs TTS + barge-in → 6. Llama reply suggestions →
-7. Guards → 8. Watson backup switch → 9. ISL gloss live → 10. Bank + hospital playbooks,
+7. Guards → 8. Captions-failed UI (no second STT vendor) → 9. ISL gloss live → 10. Bank + hospital playbooks,
 DTMF, failure states → 11. 8 UI languages → 12. Demo hardening → 13. Exotel (stretch).
 
 ## Deliberately cut (do not build)
 
 Public +91 dialling, incoming calls, more call languages, voice cloning, tone detection,
-model training/fine-tuning, accounts/login, server-side DB, transcript-as-homepage.
+model training/fine-tuning, accounts/login, server-side DB, transcript-as-homepage,
+Watson STT backup (IBM Cloud requires a card; Scribe is the only caption engine).
 
 ## Commit conventions
 
 - Work done in IBM Bob: prefix `bob:` (e.g. `bob: watsonx client + suggestion prompt`).
 - Everything else: `feat:` / `fix:` / `chore:` with the module name.
 - Screenshot every Bob session into `docs/bob-log/` before closing it.
-- `main` is owned by Tanis. Run the call loop once before merging anything into it.
+- `main` is owned by Tanish M. Run the call loop once before merging anything into it.

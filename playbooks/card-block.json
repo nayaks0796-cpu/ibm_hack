@@ -1,0 +1,40 @@
+{
+  "id": "card-block",
+  "icon": "credit-card",
+  "category": "money",
+  "channel": "phone-ivr",
+  "outcomeKind": "acknowledged",
+  "title": {
+    "en": "Block card",
+    "hi": "कार्ड ब्लॉक",
+    "ta": "அட்டை தடு",
+    "te": "కార్డ్ బ్లాక్",
+    "kn": "ಕಾರ್ಡ್ ನಿರ್ಬಂಧ",
+    "ml": "കാർഡ് ബ്ലോക്ക്",
+    "mr": "कार्ड ब्लॉक",
+    "bn": "কার্ড ব্লক"
+  },
+  "goal": {
+    "en": "Block a lost or stolen card and confirm it is blocked",
+    "hi": "खोया या चोरी कार्ड ब्लॉक कर पुष्टि लें"
+  },
+  "defaultCallLanguage": "en",
+  "keyterms": ["card", "block", "hotlist", "lost", "stolen", "IVR", "कार्ड", "ब्लॉक"],
+  "stages": [
+    { "id": "ivr", "en": "Navigate IVR to card block or lost card.", "hi": "कार्ड ब्लॉक या खोया कार्ड वाले IVR विकल्प पर जाएँ।" },
+    { "id": "id", "en": "Give bank name and last digits if asked — never OTP or PIN.", "hi": "पूछे जाने पर बैंक और अंतिम अंक दें — OTP या पिन कभी नहीं।" },
+    { "id": "confirm", "en": "Ask them to confirm the card is blocked.", "hi": "कार्ड ब्लॉक हो गया है, इसकी पुष्टि माँगें।" }
+  ],
+  "facts": [
+    {
+      "key": "bank_name",
+      "label": { "en": "Bank name", "hi": "बैंक का नाम" },
+      "required": true
+    },
+    {
+      "key": "account_or_card",
+      "label": { "en": "Last 4 digits of card", "hi": "कार्ड के अंतिम 4 अंक" },
+      "required": true
+    }
+  ]
+}

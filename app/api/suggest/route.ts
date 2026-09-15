@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     goal: string;
     callLanguage: "hi" | "en";
     uiLanguage?: string;
+    playbookId?: string;
   };
 
   const {
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
     goal = "",
     callLanguage = "hi",
     uiLanguage = "en",
+    playbookId = "",
   } = body;
 
   const suggestions = await suggest(
@@ -31,7 +33,8 @@ export async function POST(req: NextRequest) {
     facts,
     goal,
     callLanguage,
-    uiLanguage
+    uiLanguage,
+    playbookId
   );
   return NextResponse.json({ suggestions });
 }

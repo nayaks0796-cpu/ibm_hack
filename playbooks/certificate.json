@@ -1,0 +1,40 @@
+{
+  "id": "certificate",
+  "icon": "stamp",
+  "category": "government",
+  "channel": "phone-human",
+  "outcomeKind": "reference",
+  "title": {
+    "en": "Certificate",
+    "hi": "प्रमाण पत्र",
+    "ta": "சான்றிதழ்",
+    "te": "సర్టిఫికేట్",
+    "kn": "ಪ್ರಮಾಣಪತ್ರ",
+    "ml": "സർട്ടിഫിക്കറ്റ്",
+    "mr": "प्रमाणपत्र",
+    "bn": "সনদ"
+  },
+  "goal": {
+    "en": "Get a status or acknowledgement number for a certificate application",
+    "hi": "प्रमाण पत्र आवेदन की स्थिति या पावती संख्या लें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["certificate", "RTPS", "income", "caste", "application", "प्रमाण", "आवेदन"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and name the certificate (income, caste, residence).", "hi": "परिचय दें और प्रमाण पत्र का प्रकार बताएँ।" },
+    { "id": "id", "en": "Give the application or RTPS number if you have it.", "hi": "आवेदन या आरटीपीएस नंबर हो तो दें।" },
+    { "id": "number", "en": "Ask for status or a new acknowledgement number.", "hi": "स्थिति या नई पावती संख्या माँगें।" }
+  ],
+  "facts": [
+    {
+      "key": "application_number",
+      "label": { "en": "Application / RTPS number", "hi": "आवेदन / आरटीपीएस नंबर" },
+      "required": false
+    },
+    {
+      "key": "certificate_type",
+      "label": { "en": "Certificate type", "hi": "प्रमाण पत्र का प्रकार" },
+      "required": true
+    }
+  ]
+}

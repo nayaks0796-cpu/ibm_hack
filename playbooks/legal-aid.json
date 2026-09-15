@@ -1,0 +1,40 @@
+{
+  "id": "legal-aid",
+  "icon": "scale",
+  "category": "legal",
+  "channel": "phone-human",
+  "outcomeKind": "acknowledged",
+  "title": {
+    "en": "Legal aid",
+    "hi": "विधिक सहायता",
+    "ta": "சட்ட உதவி",
+    "te": "న్యాయ సహాయం",
+    "kn": "ಕಾನೂನು ನೆರವು",
+    "ml": "നിയമ സഹായം",
+    "mr": "कायदेशीर मदत",
+    "bn": "আইনি সহায়তা"
+  },
+  "goal": {
+    "en": "Reach NALSA / DLSA legal aid and confirm the next step",
+    "hi": "नालसा / डीएलएसए विधिक सहायता तक पहुँचें और अगला कदम पुष्टि करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["legal aid", "NALSA", "DLSA", "lawyer", "विधिक", "सहायता"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say you need free legal aid.", "hi": "परिचय दें और मुफ्त विधिक सहायता माँगें।" },
+    { "id": "need", "en": "Give the case type in one line. Do not invent court numbers.", "hi": "मामले का प्रकार एक पंक्ति में बताएँ। अदालत नंबर न गढ़ें।" },
+    { "id": "next", "en": "Ask what to do next or which office to visit.", "hi": "आगे क्या करना है या किस कार्यालय जाना है, पूछें।" }
+  ],
+  "facts": [
+    {
+      "key": "case_type",
+      "label": { "en": "Type of problem", "hi": "समस्या का प्रकार" },
+      "required": true
+    },
+    {
+      "key": "area",
+      "label": { "en": "District / city", "hi": "जिला / शहर" },
+      "required": false
+    }
+  ]
+}

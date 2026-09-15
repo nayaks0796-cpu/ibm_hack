@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
+import { SpeakButton, spokenFieldValue, useSpeakToText } from "@/components/BriefMic";
+import SpeakInput from "@/components/SpeakInput";
 import { applyUiLanguage, t } from "@/lib/i18n";
-import { PLAYBOOKS, playbookGoal, playbookTitle } from "@/lib/playbooks";
+import {
+  PLAYBOOK_CATEGORIES,
+  emergencyPlaybooks,
+  getPlaybook,
+  playbookGoal,
+  playbookTitle,
+  playbooksInCategory,
+} from "@/lib/playbooks";
 import {
   clearCurrentTranscript,
   factsForPlaybook,
@@ -15,19 +24,91 @@ import {
   saveProfile,
 } from "@/lib/store";
 import { RoomTransport } from "@/lib/transport/RoomTransport";
-import type { Playbook, UiLanguage } from "@/lib/types";
+import type { CallLanguage, Playbook, PlaybookCategory, UiLanguage } from "@/lib/types";
+
+const CATEGORY_KEY: Record<PlaybookCategory, "cat.emergency" | "cat.utility" | "cat.money" | "cat.health" | "cat.government" | "cat.legal"> = {
+  emergency: "cat.emergency",
+  utility: "cat.utility",
+  money: "cat.money",
+  health: "cat.health",
+  government: "cat.government",
+  legal: "cat.legal",
+};
+
+async function readGpsLocation(fallback: string): Promise<string> {
+  if (!navigator.geolocation) return fallback;
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(fallback), 2500);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        window.clearTimeout(timer);
+        resolve(
+          `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`
+        );
+      },
+      () => {
+        window.clearTimeout(timer);
+        resolve(fallback);
+      },
+      { enableHighAccuracy: false, timeout: 2200, maximumAge: 60_000 }
+    );
+  });
+}
 
 export default function StartPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
   const [facts, setFacts] = useState<Record<string, string>>({});
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [category, setCategory] = useState<PlaybookCategory | null>(null);
   const [playbookId, setPlaybookId] = useState("power-cut");
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
+  const [callLanguage, setCallLanguage] = useState<CallLanguage>("en");
   const [islAvatar, setIslAvatar] = useState(true);
   const [userBrief, setUserBrief] = useState("");
+  const [sosBusy, setSosBusy] = useState(false);
+  const [speakTarget, setSpeakTarget] = useState<string | null>(null);
+  const speakTargetRef = useRef<string | null>(null);
+  const firstFinalRef = useRef(true);
+
+  const speak = useSpeakToText({
+    callLanguage,
+    name,
+    facts,
+    onTranscript: (text) => {
+      const target = speakTargetRef.current;
+      if (!target) return;
+      if (target === "brief") {
+        setUserBrief((current) => (current.trim() ? `${current.trim()} ${text}` : text));
+        return;
+      }
+      setFacts((current) => {
+        if (firstFinalRef.current) {
+          firstFinalRef.current = false;
+          return { ...current, [target]: text };
+        }
+        const prev = (current[target] ?? "").trim();
+        return { ...current, [target]: prev ? `${prev} ${text}` : text };
+      });
+    },
+  });
+
+  function stopSpeak() {
+    speak.stop();
+    speakTargetRef.current = null;
+    setSpeakTarget(null);
+  }
+
+  function toggleSpeak(target: string) {
+    if (speakTargetRef.current === target && (speak.listening || speak.connecting)) {
+      stopSpeak();
+      return;
+    }
+    firstFinalRef.current = true;
+    speakTargetRef.current = target;
+    setSpeakTarget(target);
+    speak.start();
+  }
 
   useEffect(() => {
     const profile = loadProfile();
@@ -37,72 +118,86 @@ export default function StartPage() {
     }
     setName(profile.name);
     setUiLanguage(profile.uiLanguage);
+    setCallLanguage(profile.callLanguage);
     setIslAvatar(profile.islAvatar);
     applyUiLanguage(profile.uiLanguage);
-    const initial =
-      PLAYBOOKS.find((item) => item.id === "power-cut") ?? PLAYBOOKS[0];
-    setFacts(
-      factsForPlaybook(
-        initial.facts.map((fact) => fact.key),
-        loadFacts()
-      )
-    );
+    const initial = getPlaybook("power-cut") ?? playbooksInCategory("utility")[0];
+    if (initial) {
+      setPlaybookId(initial.id);
+      setFacts(
+        factsForPlaybook(
+          initial.facts.map((fact) => fact.key),
+          loadFacts()
+        )
+      );
+    }
     setReady(true);
   }, [router]);
 
   const playbook: Playbook =
-    PLAYBOOKS.find((item) => item.id === playbookId) ?? PLAYBOOKS[0];
+    getPlaybook(playbookId) ?? getPlaybook("power-cut") ?? playbooksInCategory("utility")[0];
+  const listed = category ? playbooksInCategory(category) : [];
 
   function selectPlaybook(id: string) {
-    const next = PLAYBOOKS.find((item) => item.id === id) ?? PLAYBOOKS[0];
+    const next = getPlaybook(id);
+    if (!next) return;
     setPlaybookId(next.id);
-    setEditingKey(null);
-    // Prefill from remembered facts for this playbook; keep in-progress edits
-    // for keys that also appear on the new playbook.
+    stopSpeak();
     setFacts((current) =>
       factsForPlaybook(
         next.facts.map((fact) => fact.key),
-        { ...loadFacts(), ...current }
+        { ...loadFacts(), ...current, location: loadProfile().location ?? "" }
       )
     );
   }
 
-  function beginEdit(key: string) {
-    setEditingKey(key);
-    setDraft(facts[key] ?? "");
-  }
-
-  function commitEdit() {
-    if (!editingKey) return;
-    setFacts((current) => ({
-      ...current,
-      [editingKey]: draft.trim(),
-    }));
-    setEditingKey(null);
+  function beginSession(
+    target: Playbook,
+    callFacts: Record<string, string>,
+    extra?: { autoSpeakOpener?: boolean; userBrief?: string }
+  ) {
+    stopSpeak();
+    const profile = loadProfile();
+    saveProfile({ ...profile, islAvatar });
+    clearCurrentTranscript();
+    saveCallSession({
+      playbookId: target.id,
+      startedAt: Date.now(),
+      callLanguage: profile.callLanguage,
+      pinnedReferenceNumber: null,
+      pinnedAnswer: null,
+      facts: callFacts,
+      islAvatar,
+      userBrief: extra?.userBrief ?? userBrief.trim(),
+      autoSpeakOpener: extra?.autoSpeakOpener,
+    });
+    void RoomTransport.requestMicAccess().catch(() => undefined);
+    router.push("/call");
   }
 
   async function startCall() {
-    const profile = loadProfile();
-    const nextProfile = { ...profile, islAvatar };
-    saveProfile(nextProfile);
     const callFacts = factsForPlaybook(
       playbook.facts.map((fact) => fact.key),
       facts
     );
-    clearCurrentTranscript();
-    saveCallSession({
-      playbookId: playbook.id,
-      startedAt: Date.now(),
-      callLanguage: profile.callLanguage,
-      pinnedReferenceNumber: null,
-      facts: callFacts,
-      islAvatar,
-      userBrief: userBrief.trim(),
+    beginSession(playbook, callFacts);
+  }
+
+  async function startSos(id = "emergency-112") {
+    if (sosBusy) return;
+    setSosBusy(true);
+    const target = getPlaybook(id) ?? emergencyPlaybooks()[0];
+    if (!target) {
+      setSosBusy(false);
+      return;
+    }
+    const profile = loadProfile();
+    const location = await readGpsLocation(profile.location?.trim() ?? "");
+    const callFacts = factsForPlaybook(target.facts.map((fact) => fact.key), {
+      ...loadFacts(),
+      location,
     });
-    void RoomTransport.requestMicAccess().catch(() => {
-      // Call page will offer Allow microphone and keep the typed clerk line.
-    });
-    router.push("/call");
+    beginSession(target, callFacts, { autoSpeakOpener: true, userBrief: "" });
   }
 
   if (!ready) {
@@ -126,122 +221,167 @@ export default function StartPage() {
           {t("start.choose_situation")}
         </p>
 
-        <div className="mt-10 grid gap-3 sm:grid-cols-3">
-          {PLAYBOOKS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => selectPlaybook(item.id)}
-              className={`choice h-full p-5 text-left ${
-                playbookId === item.id ? "choice-on" : ""
-              }`}
-            >
-              <span className="block font-serif text-2xl">{playbookTitle(item, uiLanguage)}</span>
-              <span className="mt-2 block text-sm font-normal text-[var(--muted)]">
-                {playbookGoal(item, uiLanguage)}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <section className="mt-8">
-          <h2 className="eyebrow">{t("start.isl_avatar")}</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">{t("start.isl_hint")}</p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setIslAvatar(true)}
-              className={`choice min-h-16 ${islAvatar ? "choice-on" : ""}`}
-            >
-              {t("setup.isl_on")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIslAvatar(false)}
-              className={`choice min-h-16 ${!islAvatar ? "choice-on" : ""}`}
-            >
-              {t("setup.isl_off")}
-            </button>
-          </div>
-        </section>
-
-        <section className="mt-10">
-          <h2 className="eyebrow">{t("start.confirm_facts")}</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">{t("start.facts_hint")}</p>
-          <div className="mt-4 flex flex-col gap-2">
-            {playbook.facts.map((fact) => {
-              const value = facts[fact.key] ?? "";
-              const label = fact.label[uiLanguage] ?? fact.label.en ?? fact.key;
-              if (editingKey === fact.key) {
-                return (
-                  <label key={fact.key} className="flex flex-col gap-2">
-                    <span className="text-sm font-semibold">{label}</span>
-                    <input
-                      autoFocus
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={commitEdit}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          commitEdit();
-                        }
-                      }}
-                      className="field"
-                    />
-                  </label>
-                );
-              }
-              return (
-                <button
-                  key={fact.key}
-                  type="button"
-                  onClick={() => beginEdit(fact.key)}
-                  className="choice flex items-center justify-between"
-                >
-                  <span className="text-sm font-medium text-[var(--muted)]">{label}</span>
-                  <span>{value || t("start.fact_empty")}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Autonomous AI Relay Pre-Call Briefing Card */}
-        <section className="mt-8 rounded-2xl border border-[var(--border)] bg-card p-5 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-500/10 text-base text-teal-400">
-              🤖
+        <button
+          type="button"
+          onClick={() => void startSos()}
+          disabled={sosBusy}
+          className="mt-8 flex min-h-16 w-full items-center justify-between rounded-[1.5rem] bg-danger px-5 text-left text-white shadow-card transition-transform hover:-translate-y-0.5 disabled:opacity-70"
+        >
+          <span>
+            <span className="block font-serif text-2xl">{t("start.sos")}</span>
+            <span className="mt-1 block text-sm font-normal text-white/80">
+              {t("start.sos_hint")}
             </span>
-            <div>
-              <h2 className="text-base font-bold text-ink">
-                {uiLanguage === "hi" ? "AI रिले एजेंट ब्रीफिंग (Auto-Pilot Brief)" : "AI Relay Agent Briefing (Auto-Pilot Brief)"}
-              </h2>
-              <p className="text-xs text-[var(--muted)]">
-                {uiLanguage === "hi"
-                  ? "कॉल शुरू होने से पहले अपने शब्दों में बताएं कि क्या बोलना है। आपका AI एजेंट अपने आप यह बात ऑपरेटर से कहेगा।"
-                  : "Brief what to speak about before the call starts. Your autonomous AI agent will speak this automatically upon connection."}
-              </p>
-            </div>
-          </div>
-          <textarea
-            value={userBrief}
-            onChange={(e) => setUserBrief(e.target.value)}
-            rows={3}
-            placeholder={
-              uiLanguage === "hi"
-                ? "उदा: 'इन्दिरा नगर 2nd स्टेज में दोपहर 2 बजे से बिजली कटी है, मीटर 994021। घर में मरीज है, तत्काल ठीक कराएं।'"
-                : "e.g. 'Report power outage in Sector 4 since 2 PM, meter 994021. Medical equipment in use, please expedite.'"
-            }
-            className="field mt-3 w-full text-sm resize-none rounded-xl"
-          />
-        </section>
+          </span>
+          <span className="text-sm font-semibold">{sosBusy ? "…" : "112"}</span>
+        </button>
 
-        <div className="mt-10 flex justify-end">
-          <button type="button" onClick={startCall} className="gold-btn min-h-16 px-12 text-xl">
-            {t("start.call_button")}
-          </button>
-        </div>
+        {!category ? (
+          <>
+            <p className="mt-10 eyebrow">{t("start.choose_category")}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {PLAYBOOK_CATEGORIES.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setCategory(id);
+                    const first = playbooksInCategory(id)[0];
+                    if (first) selectPlaybook(first.id);
+                  }}
+                  className="choice h-full p-5 text-left"
+                >
+                  <span className="block font-serif text-2xl">{t(CATEGORY_KEY[id])}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-10 flex items-center justify-between">
+              <p className="eyebrow">{t(CATEGORY_KEY[category])}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  stopSpeak();
+                  setCategory(null);
+                }}
+                className="text-sm font-semibold text-signal"
+              >
+                {t("start.back_to_categories")}
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {listed.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectPlaybook(item.id)}
+                  className={`choice h-full p-5 text-left ${
+                    playbookId === item.id ? "choice-on" : ""
+                  }`}
+                >
+                  <span className="block font-serif text-2xl">{playbookTitle(item, uiLanguage)}</span>
+                  <span className="mt-2 block text-sm font-normal text-[var(--muted)]">
+                    {playbookGoal(item, uiLanguage)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {category ? (
+          <>
+            <section className="mt-8">
+              <h2 className="eyebrow">{t("start.isl_avatar")}</h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">{t("start.isl_hint")}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIslAvatar(true)}
+                  className={`choice min-h-16 ${islAvatar ? "choice-on" : ""}`}
+                >
+                  {t("setup.isl_on")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIslAvatar(false)}
+                  className={`choice min-h-16 ${!islAvatar ? "choice-on" : ""}`}
+                >
+                  {t("setup.isl_off")}
+                </button>
+              </div>
+            </section>
+
+            <section className="mt-10">
+              <h2 className="eyebrow">{t("start.confirm_facts")}</h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">{t("start.facts_hint")}</p>
+              <div className="mt-4 flex flex-col gap-3">
+                {playbook.facts.map((fact) => {
+                  const label = fact.label[uiLanguage] ?? fact.label.en ?? fact.key;
+                  return (
+                    <SpeakInput
+                      key={fact.key}
+                      label={label}
+                      value={facts[fact.key] ?? ""}
+                      onChange={(value) =>
+                        setFacts((current) => ({ ...current, [fact.key]: value }))
+                      }
+                      placeholder={t("start.fact_empty")}
+                      targetId={fact.key}
+                      speakTarget={speakTarget}
+                      speakUi={speak.ui}
+                      onToggleSpeak={toggleSpeak}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+
+            {playbook.emergency ? null : (
+              <section className="mt-8 rounded-2xl border border-[var(--border)] bg-card p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-ink">{t("start.brief_title")}</h2>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{t("start.brief_hint")}</p>
+                  </div>
+                  <SpeakButton
+                    listening={speakTarget === "brief" && speak.listening}
+                    connecting={speakTarget === "brief" && speak.connecting}
+                    onClick={() => toggleSpeak("brief")}
+                  />
+                </div>
+                <textarea
+                  value={spokenFieldValue(userBrief, speak.ui, speakTarget === "brief")}
+                  onChange={(e) => setUserBrief(e.target.value)}
+                  readOnly={
+                    speakTarget === "brief" && (speak.listening || speak.connecting)
+                  }
+                  rows={3}
+                  placeholder={t("start.brief_placeholder")}
+                  className="field mt-3 w-full resize-none rounded-xl text-sm"
+                />
+                {speakTarget === "brief" && speak.listening ? (
+                  <p className="mt-2 text-xs font-semibold text-signal">
+                    {t("start.brief_listening")}
+                  </p>
+                ) : null}
+                {speakTarget === "brief" && speak.error ? (
+                  <p className="mt-2 text-xs font-semibold text-danger" role="status">
+                    {speak.error}
+                  </p>
+                ) : null}
+              </section>
+            )}
+
+            <div className="mt-10 flex justify-end">
+              <button type="button" onClick={() => void startCall()} className="gold-btn min-h-16 px-12 text-xl">
+                {playbook.emergency ? t("start.sos") : t("start.call_button")}
+              </button>
+            </div>
+          </>
+        ) : null}
       </main>
     </AppChrome>
   );

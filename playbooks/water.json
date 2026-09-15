@@ -1,0 +1,46 @@
+{
+  "id": "water",
+  "icon": "droplet",
+  "category": "utility",
+  "channel": "phone-human",
+  "outcomeKind": "reference",
+  "title": {
+    "en": "Water",
+    "hi": "पानी",
+    "ta": "தண்ணீர்",
+    "te": "నీరు",
+    "kn": "ನೀರು",
+    "ml": "വെള്ളം",
+    "mr": "पाणी",
+    "bn": "জল"
+  },
+  "goal": {
+    "en": "Get a complaint number for the water supply problem",
+    "hi": "पानी की शिकायत संख्या प्राप्त करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["water", "pipeline", "supply", "complaint", "पानी", "पाइप", "शिकायत"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say there is no water or a leak.", "hi": "परिचय दें और पानी न आने या लीक की बात करें।" },
+    { "id": "id", "en": "Give consumer number and area when asked.", "hi": "पूछे जाने पर उपभोक्ता क्रमांक और क्षेत्र दें।" },
+    { "id": "when", "en": "Say since when the problem started.", "hi": "समस्या कब से है, बताएँ।" },
+    { "id": "number", "en": "Ask for the complaint number.", "hi": "शिकायत संख्या माँगें।" }
+  ],
+  "facts": [
+    {
+      "key": "consumer_number",
+      "label": { "en": "Consumer number", "hi": "उपभोक्ता क्रमांक" },
+      "required": true
+    },
+    {
+      "key": "area",
+      "label": { "en": "Area / colony", "hi": "क्षेत्र / कॉलोनी" },
+      "required": true
+    },
+    {
+      "key": "since_when",
+      "label": { "en": "Since when", "hi": "कब से" },
+      "required": false
+    }
+  ]
+}

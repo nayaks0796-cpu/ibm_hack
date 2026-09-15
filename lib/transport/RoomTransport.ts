@@ -1,10 +1,11 @@
 // RoomTransport — demo transport using browser mic/speaker.
 // Speak goes through /api/tts first, then browser speechSynthesis.
 // Unmute calls stopSpeaking() so the TTS fetch and playback abort immediately.
-// Inbound mic audio is PCM16 @ 16 kHz for Scribe / Watson. No screen may call getUserMedia.
+// Inbound mic audio is PCM16 @ 16 kHz for ElevenLabs Scribe. No screen may call getUserMedia.
 import type { AudioTransport } from "./AudioTransport";
 import { fetchTts } from "../elevenlabs/tts";
 import { DTMF_MS, dtmfFrequencies } from "./dtmf";
+import { applyUtteranceVoice } from "./speechVoice";
 
 type LineState = "active" | "silent" | "disconnected";
 
@@ -210,7 +211,7 @@ export class RoomTransport implements AudioTransport {
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang === "hi" ? "hi-IN" : "en-IN";
+    applyUtteranceVoice(utterance, lang);
     utterance.rate = 0.95;
     utterance.onend = () => {
       if (this.generation === generation) this.speaking = false;

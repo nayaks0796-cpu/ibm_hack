@@ -22,6 +22,25 @@
     "bn": "জরুরি চিকিৎসা অ্যাপয়েন্টমেন্ট বা জরুরি শয্যা জিজ্ঞাসা"
   },
   "defaultCallLanguage": "en",
+  "category": "health",
+  "channel": "phone-human",
+  "outcomeKind": "reference",
+  "keyterms": [
+    "hospital",
+    "appointment",
+    "patient",
+    "department",
+    "OPD",
+    "अस्पताल",
+    "अपॉइंटमेंट",
+    "मरीज"
+  ],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say you need an appointment or urgent enquiry.", "hi": "परिचय दें और अपॉइंटमेंट या आपातकालीन पूछताछ बताएँ।" },
+    { "id": "id", "en": "Give hospital name, patient name, and department when asked.", "hi": "पूछे जाने पर अस्पताल, मरीज और विभाग बताएँ।" },
+    { "id": "slot", "en": "Ask for the next available slot or token.", "hi": "अगला उपलब्ध स्लॉट या टोकन माँगें।" },
+    { "id": "number", "en": "Pin the appointment or token number.", "hi": "अपॉइंटमेंट या टोकन नंबर पिन करें।" }
+  ],
   "facts": [
     {
       "key": "hospital_name",

@@ -22,6 +22,29 @@
     "bn": "অননুমোদিত লেনদেন জানান বা কার্ড ব্লক করুন"
   },
   "defaultCallLanguage": "en",
+  "category": "money",
+  "channel": "phone-ivr",
+  "outcomeKind": "reference",
+  "keyterms": [
+    "bank",
+    "card",
+    "fraud",
+    "UPI",
+    "1930",
+    "cyber",
+    "transaction",
+    "OTP",
+    "बैंक",
+    "धोखाधड़ी",
+    "शिकायत"
+  ],
+  "stages": [
+    { "id": "ivr", "en": "Navigate the IVR menu to reach fraud or card-block.", "hi": "धोखाधड़ी या कार्ड ब्लॉक के लिए IVR मेनू चलाएँ।" },
+    { "id": "intro", "en": "Introduce and say there is unauthorized activity.", "hi": "परिचय दें और अनधिकृत लेनदेन बताएँ।" },
+    { "id": "id", "en": "Give bank name and account or card number when asked.", "hi": "पूछे जाने पर बैंक और खाता या कार्ड नंबर दें।" },
+    { "id": "otp", "en": "If they ask for OTP or PIN, refuse to speak it and unmute if needed.", "hi": "OTP या पिन माँगें तो बोलने से मना करें।" },
+    { "id": "number", "en": "Ask for a complaint or ticket number.", "hi": "शिकायत या टिकट संख्या माँगें।" }
+  ],
   "facts": [
     {
       "key": "bank_name",

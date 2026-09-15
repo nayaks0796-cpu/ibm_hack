@@ -1,0 +1,67 @@
+{
+  "id": "ambulance-108",
+  "icon": "ambulance",
+  "category": "emergency",
+  "channel": "phone-human",
+  "outcomeKind": "acknowledged",
+  "emergency": true,
+  "title": {
+    "en": "Ambulance 108",
+    "hi": "एम्बुलेंस 108",
+    "ta": "ஆம்புலன்ஸ் 108",
+    "te": "అంబులెన్స్ 108",
+    "kn": "ಆಂಬ್ಯುಲೆನ್ಸ್ 108",
+    "ml": "ആംബുലൻസ് 108",
+    "mr": "अॅम्ब्युलन्स 108",
+    "bn": "অ্যাম্বুলেন্স 108"
+  },
+  "goal": {
+    "en": "Send an ambulance to my location now",
+    "hi": "अभी मेरे स्थान पर एम्बुलेंस भेजें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["ambulance", "108", "unconscious", "breathing", "एम्बुलेंस", "बेहोश"],
+  "stages": [
+    { "id": "now", "en": "Say this is a medical emergency and send an ambulance.", "hi": "कहें कि यह मेडिकल इमरजेंसी है और एम्बुलेंस भेजें।" },
+    { "id": "state", "en": "Say if the person is unconscious, bleeding, or not breathing.", "hi": "व्यक्ति बेहोश, खून बह रहा, या साँस नहीं ले रहा — बताएँ।" },
+    { "id": "stay", "en": "Confirm they are coming.", "hi": "वे आ रहे हैं, पुष्टि करें।" }
+  ],
+  "quickPhrases": [
+    {
+      "id": "send-ambulance",
+      "label": { "en": "Send ambulance now", "hi": "अभी एम्बुलेंस भेजें" },
+      "sentence": {
+        "en": "This is a medical emergency. Please send an ambulance to my location immediately.",
+        "hi": "यह मेडिकल इमरजेंसी है। कृपया तुरंत मेरे स्थान पर एम्बुलेंस भेजिए।"
+      }
+    },
+    {
+      "id": "unconscious",
+      "label": { "en": "Someone is unconscious", "hi": "कोई बेहोश है" },
+      "sentence": {
+        "en": "Someone is unconscious. Please send an ambulance now.",
+        "hi": "कोई बेहोश है। कृपया अभी एम्बुलेंस भेजिए।"
+      }
+    },
+    {
+      "id": "not-breathing",
+      "label": { "en": "Not breathing", "hi": "साँस नहीं आ रही" },
+      "sentence": {
+        "en": "The person is not breathing. Please send an ambulance immediately.",
+        "hi": "व्यक्ति साँस नहीं ले रहा। कृपया तुरंत एम्बुलेंस भेजिए।"
+      }
+    }
+  ],
+  "facts": [
+    {
+      "key": "location",
+      "label": { "en": "Location / landmark", "hi": "स्थान / लैंडमार्क" },
+      "required": true
+    },
+    {
+      "key": "patient_state",
+      "label": { "en": "What is wrong", "hi": "क्या हुआ है" },
+      "required": false
+    }
+  ]
+}

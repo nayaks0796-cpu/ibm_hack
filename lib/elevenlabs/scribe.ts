@@ -14,9 +14,17 @@ const SAMPLE_RATE = 16000;
 
 export function keytermsFromFacts(
   name: string,
-  facts: Record<string, string>
+  facts: Record<string, string>,
+  extra: string[] = []
 ): string[] {
-  const extras = ["complaint", "reference", "ticket", "शिकायत", "COMP"];
+  const extras = [
+    "complaint",
+    "reference",
+    "ticket",
+    "शिकायत",
+    "COMP",
+    ...extra,
+  ];
   const values = [name, ...Object.values(facts), ...extras]
     .map((value) => value.trim())
     .filter((value) => value.length > 1);
@@ -165,6 +173,32 @@ export class ScribeClient {
     }
     this.ws = null;
   }
+}
+
+export function createScribeSTT(
+  lang: "hi" | "en",
+  onCaption: ScribeCallback,
+  keyterms: string[] = [],
+  onError?: (error: Error) => void
+) {
+  const scribe = new ScribeClient();
+
+  const connect = async (token: string | null) => {
+    if (!token) {
+      throw new Error("Scribe token missing");
+    }
+    await scribe.connect(token, onCaption, {
+      language: lang,
+      keyterms,
+      onError,
+    });
+  };
+
+  return {
+    connect,
+    disconnect: () => scribe.disconnect(),
+    sendAudio: (chunk: ArrayBuffer | Blob) => scribe.sendAudio(chunk),
+  };
 }
 
 function isScribeFailure(type: string): boolean {

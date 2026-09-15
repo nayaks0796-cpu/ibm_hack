@@ -171,14 +171,13 @@ export function alignGlossToCatalog(tokens: string[], allowSpell = true): string
   return uniqueAdjacent(out);
 }
 
-/** Deterministic caption → gloss. Prioritizes clear sign words rather than letter-by-letter spelling. */
+/** Deterministic caption → gloss. Prefer real signs; fingerspell when nothing matches. */
 export function captionToGloss(text: string): string[] {
   const stripped = stripCodes(text);
   const rewritten = applyPhrasesToText(stripped);
   const tokens = rewritten.split(/[\s,./:;!?|]+/).filter(Boolean);
   const result = alignGlossToCatalog(tokens, false);
-  // If no direct words were matched and text has short single-word token, fallback to spelling
-  if (result.length === 0 && tokens.length === 1 && tokens[0].length <= 5) {
+  if (result.length === 0 && tokens.length > 0) {
     return alignGlossToCatalog(tokens, true);
   }
   return result;

@@ -34,6 +34,6 @@ describe("UI languages", () => {
   });
 
   test("interpolates greeting names", () => {
-    expect(t("start.greeting", { name: "Tanish" }, "hi")).toBe("नमस्ते, Tanish");
+    expect(t("start.greeting", { name: "Tanish M" }, "hi")).toBe("नमस्ते, Tanish M");
   });
 });

@@ -1,0 +1,45 @@
+{
+  "id": "fir-file",
+  "icon": "shield",
+  "category": "legal",
+  "channel": "in-person",
+  "outcomeKind": "reference",
+  "title": {
+    "en": "File an FIR",
+    "hi": "एफआईआर दर्ज करें",
+    "ta": "FIR பதிவு",
+    "te": "FIR దాఖలు",
+    "kn": "FIR ದಾಖಲು",
+    "ml": "FIR ഫയൽ",
+    "mr": "FIR नोंदवा",
+    "bn": "FIR দায়ের"
+  },
+  "goal": {
+    "en": "File a complaint at the police desk and get an FIR or GD number",
+    "hi": "थाने के काउंटर पर शिकायत दर्ज कर FIR या जीडी नंबर लें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["FIR", "GD", "police", "complaint", "station", "एफआईआर", "थाना", "शिकायत"],
+  "stages": [
+    { "id": "intro", "en": "Place the phone facing the officer and introduce.", "hi": "फोन अधिकारी की ओर रखें और परिचय दें।" },
+    { "id": "facts", "en": "Give name, place, and a short account of what happened.", "hi": "नाम, जगह और क्या हुआ, संक्षेप में बताएँ।" },
+    { "id": "number", "en": "Ask for the FIR or GD number and pin it.", "hi": "FIR या जीडी नंबर माँगें और पिन करें।" }
+  ],
+  "facts": [
+    {
+      "key": "complainant_name",
+      "label": { "en": "Your name", "hi": "आपका नाम" },
+      "required": true
+    },
+    {
+      "key": "incident_place",
+      "label": { "en": "Place of incident", "hi": "घटनास्थल" },
+      "required": true
+    },
+    {
+      "key": "incident_time",
+      "label": { "en": "When it happened", "hi": "कब हुआ" },
+      "required": false
+    }
+  ]
+}

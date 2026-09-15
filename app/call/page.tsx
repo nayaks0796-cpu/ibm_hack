@@ -12,14 +12,24 @@ import RefusedOutcomeBanner from "@/components/RefusedOutcomeBanner";
 import ReplySuggestions from "@/components/ReplySuggestions";
 import SilenceRing, { type RingState } from "@/components/SilenceRing";
 import SilentClerkBanner from "@/components/SilentClerkBanner";
-import { keytermsFromFacts } from "@/lib/elevenlabs/scribe";
+import UnmuteButton from "@/components/UnmuteButton";
+import { answerPreview, looksLikeGoalAnswer } from "@/lib/guard/answer";
+import { createScribeSTT, keytermsFromFacts } from "@/lib/elevenlabs/scribe";
 import { containsSensitiveCode } from "@/lib/guard/otp";
 import { redact } from "@/lib/guard/redact";
-import { detectReferenceNumbers } from "@/lib/guard/refnum";
+import {
+  detectReferenceNumbers,
+  isClerkSpokenReference,
+} from "@/lib/guard/refnum";
 import { applyUiLanguage, t, UI_LANGUAGES } from "@/lib/i18n";
 import { decideCallOutcome } from "@/lib/outcome/decide";
 import { detectRefusal } from "@/lib/outcome/refuse";
-import { getPlaybook, playbookTitle } from "@/lib/playbooks";
+import {
+  getPlaybook,
+  playbookChannel,
+  playbookKeyterms,
+  playbookTitle,
+} from "@/lib/playbooks";
 import {
   appendTranscriptEntry,
   clearCallSession,
@@ -31,17 +41,18 @@ import {
   saveProfile,
 } from "@/lib/store";
 import {
-  accessNeedPhrase,
   alwaysPresentSuggestions,
   detectClerkIntent,
   disclosureSuggestion,
+  emergencyOpenerSuggestion,
   finalizeReplySuggestions,
 } from "@/lib/suggestions/skeleton";
 import { RoomTransport } from "@/lib/transport/RoomTransport";
 import { tryClaimSpeech } from "@/lib/transport/speechLock";
-import { createSTTWithFallback } from "@/lib/watson-stt/autoswitch";
+import { resolveVoiceId } from "@/lib/voices";
 import type {
   AccessNeed,
+  PlaybookChannel,
   ReplySuggestion,
   TranscriptEntry,
   UiLanguage,
@@ -51,11 +62,12 @@ const LINE_LABEL = {
   active: "call.line_active",
   silent: "call.line_silent",
   disconnected: "call.line_disconnected",
+  ringing: "call.line_ringing",
 } as const;
 
 const SILENT_CLERK_SEC = 10;
 
-type SttController = ReturnType<typeof createSTTWithFallback>;
+type SttController = ReturnType<typeof createScribeSTT>;
 
 export default function CallPage() {
   const router = useRouter();
@@ -66,11 +78,15 @@ export default function CallPage() {
   const ingestRef = useRef<(text: string, fromVoice: boolean) => void>(
     () => undefined
   );
+  const handleSendRef = useRef<(text?: string) => Promise<void>>(async () => undefined);
+  const maybeSpeakSosOpenerRef = useRef<() => void>(() => undefined);
   const connectingRef = useRef(false);
   const roomRef = useRef<CallRoom | null>(null);
 
   const [ready, setReady] = useState(false);
   const [clerkPeerConnected, setClerkPeerConnected] = useState(false);
+  const clerkPeerConnectedRef = useRef(false);
+  clerkPeerConnectedRef.current = clerkPeerConnected;
   const [lineState, setLineState] = useState<RingState>("disconnected");
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [clerkDraft, setClerkDraft] = useState("");
@@ -81,18 +97,30 @@ export default function CallPage() {
   const isEditingRef = useRef(false);
   isEditingRef.current = isEditing;
 
-  const [autoPilot, setAutoPilot] = useState(true);
-  const autoPilotRef = useRef(true);
-  autoPilotRef.current = autoPilot;
-
-  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
-  const autoTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Auto-select fills the draft only — never speaks. Hard rule: Send alone speaks.
+  const [autoSelect, setAutoSelect] = useState(false);
+  const autoSelectRef = useRef(false);
+  autoSelectRef.current = autoSelect;
 
   const [needsIntervention, setNeedsIntervention] = useState(false);
+  const needsInterventionRef = useRef(false);
+  needsInterventionRef.current = needsIntervention;
   const [interventionReason, setInterventionReason] = useState("");
   const [userBrief, setUserBrief] = useState("");
+  const [unmuted, setUnmuted] = useState(false);
+  const unmutedRef = useRef(false);
+  unmutedRef.current = unmuted;
   const [blocked, setBlocked] = useState(false);
   const [heardRef, setHeardRef] = useState<string | null>(null);
+  const [heardAnswer, setHeardAnswer] = useState<string | null>(null);
+  const [channel, setChannel] = useState<PlaybookChannel>("phone-human");
+  const [isEmergency, setIsEmergency] = useState(false);
+  const isEmergencyRef = useRef(false);
+  const pendingSosOpenerRef = useRef<string | null>(null);
+  const suggestAbortRef = useRef<AbortController | null>(null);
+  const glossAbortRef = useRef<AbortController | null>(null);
+  const sosOpenerSentRef = useRef(false);
+  const [sosAwaitingGreeting, setSosAwaitingGreeting] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
   const [showIsl, setShowIsl] = useState(true);
   const [name, setName] = useState("");
@@ -105,9 +133,9 @@ export default function CallPage() {
   const [playbookGoal, setPlaybookGoal] = useState("");
   const [llmSuggestions, setLlmSuggestions] = useState<ReplySuggestion[]>([]);
   const [gloss, setGloss] = useState<string[]>([]);
-  const [demoVoice, setDemoVoice] = useState(true);
+  const [demoVoice, setDemoVoice] = useState(false);
   const [liveCaptions, setLiveCaptions] = useState(false);
-  const [backupCaptions, setBackupCaptions] = useState(false);
+  const [captionsFailed, setCaptionsFailed] = useState(false);
   const [micNeeded, setMicNeeded] = useState(false);
   const [livePartial, setLivePartial] = useState("");
   const [updatingReplies, setUpdatingReplies] = useState(false);
@@ -122,6 +150,7 @@ export default function CallPage() {
     const transport = transportRef.current;
     if (!transport || connectingRef.current || sttRef.current) return;
     connectingRef.current = true;
+    setCaptionsFailed(false);
 
     try {
       await transport.startInbound();
@@ -139,10 +168,20 @@ export default function CallPage() {
       token = data.token ?? null;
     }
 
+    const dropScribe = () => {
+      unsubAudioRef.current?.();
+      unsubAudioRef.current = null;
+      sttRef.current?.disconnect();
+      sttRef.current = null;
+      setLiveCaptions(false);
+      setLivePartial("");
+      setCaptionsFailed(true);
+    };
+
     const profile = loadProfile();
     const session = loadCallSession();
     const lang = session?.callLanguage ?? profile.callLanguage;
-    const controller = createSTTWithFallback(
+    const controller = createScribeSTT(
       lang,
       (text, isFinal) => {
         if (!isFinal) {
@@ -152,8 +191,12 @@ export default function CallPage() {
         setLivePartial("");
         ingestRef.current(text, true);
       },
-      () => setBackupCaptions(true),
-      keytermsFromFacts(profile.name, session?.facts ?? {})
+      keytermsFromFacts(
+        profile.name,
+        session?.facts ?? {},
+        playbookKeyterms(getPlaybook(session?.playbookId ?? ""))
+      ),
+      () => dropScribe()
     );
     sttRef.current = controller;
     unsubAudioRef.current = transport.onInboundAudio((chunk) => {
@@ -163,11 +206,9 @@ export default function CallPage() {
     try {
       await controller.connect(token);
       setLiveCaptions(true);
+      setCaptionsFailed(false);
     } catch {
-      unsubAudioRef.current?.();
-      unsubAudioRef.current = null;
-      controller.disconnect();
-      sttRef.current = null;
+      dropScribe();
     } finally {
       connectingRef.current = false;
     }
@@ -193,30 +234,47 @@ export default function CallPage() {
     setPlaybookGoal(
       playbook?.goal[session.callLanguage] ?? playbook?.goal.en ?? ""
     );
+    setChannel(playbook ? playbookChannel(playbook) : "phone-human");
+    const emergency = Boolean(playbook?.emergency);
+    setIsEmergency(emergency);
+    isEmergencyRef.current = emergency;
     setEntries(loadCurrentTranscript());
 
     const brief = session.userBrief?.trim();
     setUserBrief(brief || "");
 
-    let initialSug: ReplySuggestion;
-    if (brief) {
-      const initialSentence =
-        session.callLanguage === "hi"
-          ? `नमस्ते, मैं ${profile.name} बोल रहा हूँ। ${accessNeedPhrase(profile.accessNeed, "hi")}। ${brief}`
-          : `Hello, my name is ${profile.name}. ${accessNeedPhrase(profile.accessNeed, "en")}. ${brief}`;
+    const disclosure = disclosureSuggestion(
+      profile.name,
+      session.callLanguage,
+      profile.accessNeed,
+      playbook ? playbookChannel(playbook) : "phone-human"
+    );
+    let initialSug: ReplySuggestion = playbook?.emergency
+      ? emergencyOpenerSuggestion(
+          profile.name,
+          session.callLanguage,
+          profile.accessNeed,
+          session.facts ?? {}
+        )
+      : disclosure;
+    if (brief && !playbook?.emergency) {
       initialSug = {
         id: "brief-intro",
         label: t("call.suggest.state_issue") || "Initial Statement",
-        sentence: initialSentence,
+        sentence: `${disclosure.sentence} ${brief}`,
       };
-    } else {
-      initialSug = disclosureSuggestion(profile.name, session.callLanguage, profile.accessNeed);
     }
 
     setSelected(initialSug);
     setDraftSentence(initialSug.sentence);
     setOriginalSentence(initialSug.sentence);
     setReady(true);
+
+    if (session.autoSpeakOpener && playbook?.emergency) {
+      pendingSosOpenerRef.current = initialSug.sentence;
+      sosOpenerSentRef.current = false;
+      setSosAwaitingGreeting(true);
+    }
 
     const transport = transportRef.current;
     if (!transport) return;
@@ -230,12 +288,21 @@ export default function CallPage() {
     const room = new CallRoom("demo-room", "user");
     roomRef.current = room;
 
-    room.send({
-      type: "session-sync",
-      callerName: profile.name,
-      playbookId: session.playbookId,
-      callLanguage: session.callLanguage,
-      facts: session.facts ?? {},
+    const syncSession = () => {
+      room.send({
+        type: "session-sync",
+        callerName: profile.name,
+        playbookId: session.playbookId,
+        callLanguage: session.callLanguage,
+        facts: session.facts ?? {},
+      });
+    };
+
+    syncSession();
+
+    const unsubPeer = room.onPeerChange((connected) => {
+      setClerkPeerConnected(connected);
+      if (connected) syncSession();
     });
 
     const unsubRoom = room.onMessage((msg: CallRoomMessage) => {
@@ -243,27 +310,17 @@ export default function CallPage() {
         if (msg.text) {
           ingestRef.current(msg.text, false);
         }
-      } else if (msg.type === "peer-joined" || msg.type === "room-joined") {
-        setClerkPeerConnected(true);
-        room.send({
-          type: "session-sync",
-          callerName: profile.name,
-          playbookId: session.playbookId,
-          callLanguage: session.callLanguage,
-          facts: session.facts ?? {},
-        });
       } else if (msg.type === "session-sync") {
         if (msg.callLanguage && (msg.callLanguage === "en" || msg.callLanguage === "hi")) {
           setCallLanguage(msg.callLanguage);
         }
-      } else if (msg.type === "peer-left") {
-        setClerkPeerConnected(false);
       } else if (msg.type === "call-ended") {
         endCall();
       }
     });
 
     return () => {
+      unsubPeer();
       unsubRoom();
       room.disconnect();
       unsubscribe();
@@ -303,6 +360,7 @@ export default function CallPage() {
         name,
         accessNeed,
         llm: llmSuggestions,
+        transcript: entries,
       }),
     [
       name,
@@ -336,7 +394,20 @@ export default function CallPage() {
     const cleaned = text.trim();
     if (!cleaned) return;
 
-    const asUser = false;
+    // Mic while muted is demo line audio only when no clerk peer is connected.
+    // During SOS ringing, the mic is not 112 — ignore it until the desk is online.
+    // With a clerk console peer, clerk captions arrive via CallRoom — ignore muted mic.
+    if (fromVoice && !unmutedRef.current) {
+      if (isEmergencyRef.current && !clerkPeerConnectedRef.current) return;
+      if (clerkPeerConnectedRef.current) return;
+    }
+
+    const asUser = fromVoice && unmutedRef.current;
+    if (asUser) {
+      transportRef.current?.stopSpeaking();
+      cancelSpeakRef.current = null;
+    }
+
     const stored = pushEntry({
       t: Date.now(),
       side: asUser ? "us" : "clerk",
@@ -349,7 +420,6 @@ export default function CallPage() {
       if (!isEditingRef.current) {
         setSelected(null);
         setBlocked(false);
-        setLlmSuggestions([]);
 
         // Detect if clerk asked for missing fact
         const intent = detectClerkIntent(cleaned);
@@ -360,11 +430,6 @@ export default function CallPage() {
               ? "ऑपरेटर ने उपभोक्ता / मीटर संख्या पूछी है जो उपलब्ध नहीं है। कृपया नीचे लिखें या चुनें।"
               : "Operator asked for your Consumer / Meter Number. Please provide or select below."
           );
-          if (autoTimerRef.current) {
-            clearInterval(autoTimerRef.current);
-            autoTimerRef.current = null;
-          }
-          setAutoCountdown(null);
         } else if (intent === "ask-place" && !facts.area) {
           setNeedsIntervention(true);
           setInterventionReason(
@@ -372,11 +437,6 @@ export default function CallPage() {
               ? "ऑपरेटर ने आपका इलाका / क्षेत्र पूछा है। कृपया नीचे लिखें या चुनें।"
               : "Operator asked for your locality / area. Please provide or select below."
           );
-          if (autoTimerRef.current) {
-            clearInterval(autoTimerRef.current);
-            autoTimerRef.current = null;
-          }
-          setAutoCountdown(null);
         } else {
           setNeedsIntervention(false);
           setInterventionReason("");
@@ -390,17 +450,41 @@ export default function CallPage() {
 
     if (!asUser && !containsSensitiveCode(cleaned)) {
       const found = detectReferenceNumbers(cleaned);
-      if (found[0]) setHeardRef(found[0]);
+      if (found[0]) {
+        setHeardRef(found[0]);
+        setHeardAnswer(null);
+      } else {
+        const playbook = getPlaybook(playbookId);
+        if (
+          (playbook?.outcomeKind === "answer" || playbook?.outcomeKind === "acknowledged") &&
+          looksLikeGoalAnswer(cleaned)
+        ) {
+          setHeardAnswer(answerPreview(cleaned));
+        }
+      }
+    }
+
+    if (asUser) return;
+
+    if (!fromVoice) {
+      maybeSpeakSosOpenerRef.current();
     }
 
     const history = loadCurrentTranscript();
     const session = loadCallSession();
     const lang = session?.callLanguage ?? callLanguage;
     const profile = loadProfile();
+    suggestAbortRef.current?.abort();
+    glossAbortRef.current?.abort();
+    const suggestAbort = new AbortController();
+    const glossAbort = new AbortController();
+    suggestAbortRef.current = suggestAbort;
+    glossAbortRef.current = glossAbort;
     setUpdatingReplies(true);
     void fetch("/api/suggest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: suggestAbort.signal,
       body: JSON.stringify({
         caption: stored.text,
         history: history.slice(-6),
@@ -408,9 +492,13 @@ export default function CallPage() {
         goal: playbookGoal,
         callLanguage: lang,
         uiLanguage: profile.uiLanguage,
+        playbookId: session?.playbookId ?? playbookId,
       }),
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`suggest ${res.status}`);
+        return res.json();
+      })
       .then((data: { suggestions?: ReplySuggestion[] }) => {
         const next = (data.suggestions ?? []).filter(
           (item) =>
@@ -419,66 +507,49 @@ export default function CallPage() {
             !item.id.startsWith("always-")
         );
         setLlmSuggestions(next);
-        if (!isEditingRef.current && next[0]) {
+        if (
+          autoSelectRef.current &&
+          !isEditingRef.current &&
+          !needsInterventionRef.current &&
+          next[0]
+        ) {
           setSelected(next[0]);
           setDraftSentence(next[0].sentence);
           setOriginalSentence(next[0].sentence);
-          if (autoPilotRef.current && !needsIntervention) {
-            triggerAutoSpeak(next[0].sentence, 2.5);
-          }
         }
       })
-      .catch(() => {
-        // Keep hardcoded reply suggestions if the LLM is offline.
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === "AbortError") return;
+        // Keep the last LLM replies if this request failed.
       })
-      .finally(() => setUpdatingReplies(false));
-
-    if (asUser) return;
+      .finally(() => {
+        if (suggestAbortRef.current === suggestAbort) {
+          setUpdatingReplies(false);
+        }
+      });
 
     void fetch("/api/gloss", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: glossAbort.signal,
       body: JSON.stringify({ text: stored.text }),
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`gloss ${res.status}`);
+        return res.json();
+      })
       .then((data: { gloss?: string[] }) => {
         if (data.gloss?.length) setGloss(data.gloss);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === "AbortError") return;
         // Keep the last gloss if the avatar endpoint is offline.
       });
   }
 
   ingestRef.current = (text, fromVoice) => ingestCaption(text, fromVoice);
 
-  function triggerAutoSpeak(sentence: string, delaySec = 2.5) {
-    if (!autoPilotRef.current || isEditingRef.current || needsIntervention) return;
-    if (autoTimerRef.current) clearInterval(autoTimerRef.current);
-
-    setAutoCountdown(delaySec);
-    const started = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - started) / 1000;
-      const remaining = Math.max(0, +(delaySec - elapsed).toFixed(1));
-      setAutoCountdown(remaining);
-      if (remaining <= 0) {
-        clearInterval(interval);
-        autoTimerRef.current = null;
-        setAutoCountdown(null);
-        if (autoPilotRef.current && !isEditingRef.current) {
-          void handleSend(sentence);
-        }
-      }
-    }, 100);
-    autoTimerRef.current = interval;
-  }
-
   function handleReframe(type: "urgent" | "polite" | "concise") {
-    if (autoTimerRef.current) {
-      clearInterval(autoTimerRef.current);
-      autoTimerRef.current = null;
-    }
-    setAutoCountdown(null);
     setIsEditing(true);
     isEditingRef.current = true;
 
@@ -507,15 +578,26 @@ export default function CallPage() {
   }
 
   function handleResetDraft() {
-    if (autoTimerRef.current) {
-      clearInterval(autoTimerRef.current);
-      autoTimerRef.current = null;
-    }
-    setAutoCountdown(null);
     setDraftSentence(originalSentence || selected?.sentence || "");
     setIsEditing(false);
     isEditingRef.current = false;
   }
+
+  function maybeSpeakSosOpener() {
+    if (sosOpenerSentRef.current) return;
+    if (!pendingSosOpenerRef.current) return;
+    if (!clerkPeerConnectedRef.current) return;
+    const sentence = pendingSosOpenerRef.current;
+    sosOpenerSentRef.current = true;
+    pendingSosOpenerRef.current = null;
+    setSosAwaitingGreeting(false);
+    const current = loadCallSession();
+    if (current?.autoSpeakOpener) {
+      saveCallSession({ ...current, autoSpeakOpener: false });
+    }
+    void handleSendRef.current?.(sentence);
+  }
+  maybeSpeakSosOpenerRef.current = maybeSpeakSosOpener;
 
   function addClerkCaption(event: FormEvent) {
     event.preventDefault();
@@ -526,12 +608,6 @@ export default function CallPage() {
   }
 
   async function handleSend(customText?: string) {
-    if (autoTimerRef.current) {
-      clearInterval(autoTimerRef.current);
-      autoTimerRef.current = null;
-    }
-    setAutoCountdown(null);
-
     const text = (customText || draftSentence || selected?.sentence || "").trim();
     if (!text) return;
 
@@ -548,6 +624,9 @@ export default function CallPage() {
 
     const msgId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
+    // Claim before broadcasting so the clerk tab cannot steal playback on same machine.
+    if (!tryClaimSpeech(msgId)) return;
+
     pushEntry({
       t: Date.now(),
       side: "us",
@@ -556,9 +635,12 @@ export default function CallPage() {
       redacted: false,
     });
 
+    const speakLang = loadCallSession()?.callLanguage ?? callLanguage;
+
     roomRef.current?.send({
       type: "user-tts",
       text,
+      lang: speakLang,
       timestamp: Date.now(),
       msgId,
     });
@@ -568,7 +650,10 @@ export default function CallPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`gloss ${res.status}`);
+        return res.json();
+      })
       .then((data: { gloss?: string[] }) => {
         if (data.gloss?.length) setGloss(data.gloss);
       })
@@ -577,15 +662,12 @@ export default function CallPage() {
     const transport = transportRef.current;
     if (!transport) return;
 
-    // Single-speech guard across caller and clerk tabs on same computer
-    if (!tryClaimSpeech(msgId)) return;
-
     cancelSpeakRef.current = () => transport.stopSpeaking();
 
     try {
       const cancel = await transport.speak(
         text,
-        callLanguage,
+        speakLang,
         loadProfile().voice
       );
       cancelSpeakRef.current = cancel;
@@ -596,17 +678,22 @@ export default function CallPage() {
     }
   }
 
+  handleSendRef.current = handleSend;
+
   useEffect(() => {
-    if (!isEditingRef.current && contextual.length > 0 && (!selected || !draftSentence)) {
+    if (
+      autoSelectRef.current &&
+      !isEditingRef.current &&
+      !needsInterventionRef.current &&
+      contextual.length > 0 &&
+      (!selected || !draftSentence)
+    ) {
       const top = contextual[0];
       setSelected(top);
       setDraftSentence(top.sentence);
       setOriginalSentence(top.sentence);
-      if (autoPilotRef.current && !needsIntervention) {
-        triggerAutoSpeak(top.sentence, 2.5);
-      }
     }
-  }, [contextual, needsIntervention]);
+  }, [contextual, selected, draftSentence]);
 
   function handleDtmf(key: string) {
     transportRef.current?.sendDTMF(key);
@@ -641,8 +728,22 @@ export default function CallPage() {
     const session = loadCallSession();
     const value = ref ?? heardRef;
     if (!session || !value) return;
+    // Pin only numbers the clerk actually said — never invent from our side.
+    const transcript = loadCurrentTranscript();
+    if (!isClerkSpokenReference(value, transcript)) {
+      setHeardRef(null);
+      return;
+    }
     saveCallSession({ ...session, pinnedReferenceNumber: value });
     setHeardRef(null);
+  }
+
+  function pinAnswer(text?: string) {
+    const session = loadCallSession();
+    const value = text ?? heardAnswer;
+    if (!session || !value) return;
+    saveCallSession({ ...session, pinnedAnswer: value });
+    setHeardAnswer(null);
   }
 
   function handleSwitchLanguage(newUiLang: UiLanguage, newCallLang?: "hi" | "en") {
@@ -658,7 +759,7 @@ export default function CallPage() {
       ...profile,
       uiLanguage: newUiLang,
       callLanguage: targetCallLang,
-      voice: targetCallLang === "hi" ? "aditi" : "alia",
+      voice: resolveVoiceId(profile.voice, targetCallLang),
     });
 
     const session = loadCallSession();
@@ -677,18 +778,29 @@ export default function CallPage() {
       );
     }
 
-    const newDisclosure = disclosureSuggestion(name, targetCallLang, accessNeed);
-    if (!selected || selected.id === "disclosure") {
-      setSelected(newDisclosure);
-    } else {
+    const newDisclosure = disclosureSuggestion(
+      name,
+      targetCallLang,
+      accessNeed,
+      channel
+    );
+    let nextSelected = newDisclosure;
+    if (selected?.id === "brief-intro" || userBrief.trim()) {
+      nextSelected = {
+        id: "brief-intro",
+        label: t("call.suggest.state_issue") || "Initial Statement",
+        sentence: userBrief.trim()
+          ? `${newDisclosure.sentence} ${userBrief.trim()}`
+          : newDisclosure.sentence,
+      };
+    } else if (selected && selected.id !== "disclosure") {
       const nextAlways = alwaysPresentSuggestions(targetCallLang);
       const matchAlways = nextAlways.find((item) => item.id === selected.id);
-      if (matchAlways) {
-        setSelected(matchAlways);
-      } else {
-        setSelected(newDisclosure);
-      }
+      if (matchAlways) nextSelected = matchAlways;
     }
+    setSelected(nextSelected);
+    setDraftSentence(nextSelected.sentence);
+    setOriginalSentence(nextSelected.sentence);
 
     roomRef.current?.send({
       type: "session-sync",
@@ -717,8 +829,11 @@ export default function CallPage() {
     const transcript = loadCurrentTranscript();
     const decided = decideCallOutcome({
       pinnedReferenceNumber: session.pinnedReferenceNumber,
+      pinnedAnswer: session.pinnedAnswer,
       transcript,
       refused: asRefused || clerkRefused,
+      outcomeKind: getPlaybook(session.playbookId)?.outcomeKind,
+      emergency: Boolean(getPlaybook(session.playbookId)?.emergency),
     });
     saveOutcome({
       playbookId: session.playbookId,
@@ -726,6 +841,8 @@ export default function CallPage() {
       endedAt: Date.now(),
       result: decided.result,
       referenceNumber: decided.referenceNumber,
+      capturedAnswer: decided.capturedAnswer,
+      outcomeKind: getPlaybook(session.playbookId)?.outcomeKind,
       facts: session.facts ?? {},
       transcript,
     });
@@ -737,77 +854,81 @@ export default function CallPage() {
     return <main className="min-h-screen bg-paper" />;
   }
 
+  const displayRing: RingState = clerkPeerConnected ? lineState : "ringing";
+
   return (
     <main
       key={`${uiLanguage}-${callLanguage}`}
       className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-6"
     >
-      <header className="flex items-center justify-between gap-3 animate-fade-up">
-        <div className="flex items-center gap-3">
-          <SilenceRing state={lineState} />
-          <div>
-            <p className="text-sm font-semibold">{t(LINE_LABEL[lineState])}</p>
-            <p className="text-xs text-[var(--muted)]">{playbookName}</p>
+      <header className="animate-fade-up rounded-2xl border border-[var(--border)] bg-card/90 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <SilenceRing state={displayRing} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold leading-none">
+                  {t(LINE_LABEL[displayRing])}
+                </p>
+                {liveCaptions ? (
+                  <span className="rounded-full bg-signal/15 px-2.5 py-0.5 text-[11px] font-semibold text-signal">
+                    {t("call.live_captions")}
+                  </span>
+                ) : captionsFailed ? (
+                  <span className="rounded-full bg-highlight/20 px-2.5 py-0.5 text-[11px] font-semibold text-highlight-ink">
+                    {t("call.captions_off")}
+                  </span>
+                ) : null}
+                {demoVoice ? (
+                  <span className="rounded-full bg-highlight/20 px-2.5 py-0.5 text-[11px] font-semibold text-highlight-ink">
+                    {t("call.demo_voice")}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 truncate text-xs text-[var(--muted)]">
+                {playbookName}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {backupCaptions ? (
-            <span className="rounded-full bg-highlight/20 px-3 py-1 text-xs font-semibold text-highlight-ink">
-              {t("call.backup_captions")}
-            </span>
-          ) : liveCaptions ? (
-            <span className="rounded-full bg-signal/15 px-3 py-1 text-xs font-semibold text-signal">
-              {t("call.live_captions")}
-            </span>
-          ) : null}
-          {demoVoice ? (
-            <span className="rounded-full bg-highlight/20 px-3 py-1 text-xs font-semibold text-highlight-ink">
-              {t("call.demo_voice")}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            id="call-autopilot-toggle"
-            onClick={() => {
-              const next = !autoPilot;
-              setAutoPilot(next);
-              autoPilotRef.current = next;
-              if (!next) {
-                if (autoTimerRef.current) clearInterval(autoTimerRef.current);
-                autoTimerRef.current = null;
-                setAutoCountdown(null);
-              } else if (selected && !needsIntervention && !isEditing) {
-                triggerAutoSpeak(draftSentence || selected.sentence, 2.5);
-              }
-            }}
-            aria-pressed={autoPilot}
-            className={`min-h-11 rounded-full px-3.5 text-xs font-semibold transition-all ${
-              autoPilot
-                ? "bg-teal-600 text-white shadow-sm border border-teal-500"
-                : "border border-[var(--border)] bg-raised text-[var(--muted)]"
-            }`}
-          >
-            {autoPilot ? "🤖 Auto-Pilot: ON" : "👤 Auto-Pilot: PAUSED"}
-          </button>
-          <button
-            type="button"
-            onClick={toggleIsl}
-            aria-pressed={showIsl}
-            className={`min-h-11 rounded-full px-4 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5 ${
-              showIsl
-                ? "bg-ink text-paper"
-                : "border border-[var(--border)] bg-raised text-ink"
-            }`}
-          >
-            {showIsl ? t("call.isl_on") : t("call.isl_off")}
-          </button>
-          <button
-            type="button"
-            onClick={() => endCall()}
-            className="min-h-11 rounded-full bg-danger px-4 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
-          >
-            {t("call.end")}
-          </button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-0.5 rounded-full border border-[var(--border)] bg-paper p-1">
+              <button
+                type="button"
+                id="call-autoselect-toggle"
+                onClick={() => {
+                  setAutoSelect((value) => !value);
+                }}
+                aria-pressed={autoSelect}
+                className={`min-h-9 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+                  autoSelect
+                    ? "bg-ink text-paper"
+                    : "text-[var(--muted)] hover:text-ink"
+                }`}
+              >
+                Auto-select
+              </button>
+              <button
+                type="button"
+                onClick={toggleIsl}
+                aria-pressed={showIsl}
+                className={`min-h-9 rounded-full px-3.5 text-xs font-semibold transition-colors ${
+                  showIsl
+                    ? "bg-ink text-paper"
+                    : "text-[var(--muted)] hover:text-ink"
+                }`}
+              >
+                {showIsl ? t("call.isl_on") : t("call.isl_off")}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => endCall()}
+              className="min-h-9 rounded-full bg-danger px-4 text-xs font-semibold text-white transition-colors hover:brightness-95"
+            >
+              {t("call.end")}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -874,6 +995,24 @@ export default function CallPage() {
         </div>
       </div>
 
+      {channel === "in-person" ? (
+        <p className="mt-4 rounded-2xl border border-[var(--border)] bg-raised px-4 py-3 text-sm font-semibold">
+          {t("call.desk_hint")}
+        </p>
+      ) : null}
+
+      {!clerkPeerConnected ? (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-raised px-4 py-4">
+          <p className="text-sm font-semibold">{t("call.ringing")}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("call.ringing_hint")}</p>
+        </div>
+      ) : isEmergency && sosAwaitingGreeting ? (
+        <div className="mt-4 rounded-2xl border border-signal/30 bg-[rgba(14,124,114,0.08)] px-4 py-4">
+          <p className="text-sm font-semibold text-signal">{t("call.picked_up")}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("call.waiting_greeting")}</p>
+        </div>
+      ) : null}
+
       {micNeeded ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-raised px-4 py-3">
           <p className="text-sm text-[var(--muted)]">{t("call.mic_needed")}</p>
@@ -887,12 +1026,37 @@ export default function CallPage() {
         </div>
       ) : null}
 
+      {captionsFailed && !micNeeded ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-raised px-4 py-3">
+          <p className="text-sm text-[var(--muted)]">{t("call.captions_failed")}</p>
+          <button
+            type="button"
+            onClick={() => void bootLiveCaptions()}
+            className="ghost-btn min-h-11 px-4"
+          >
+            {t("call.retry_captions")}
+          </button>
+        </div>
+      ) : null}
+
       {heardRef ? (
         <div className="mt-4">
           <NumberCapturedBanner
             referenceNumber={heardRef}
             onConfirmPin={pinHeard}
             onDismiss={() => setHeardRef(null)}
+            lang={uiLanguage}
+          />
+        </div>
+      ) : null}
+
+      {heardAnswer ? (
+        <div className="mt-4">
+          <NumberCapturedBanner
+            referenceNumber={heardAnswer}
+            mode="answer"
+            onConfirmPin={pinAnswer}
+            onDismiss={() => setHeardAnswer(null)}
             lang={uiLanguage}
           />
         </div>
@@ -919,6 +1083,8 @@ export default function CallPage() {
               const match = alwaysPresent.find((item) => item.id === id);
               if (match) {
                 setSelected(match);
+                setDraftSentence(match.sentence);
+                setOriginalSentence(match.sentence);
                 setBlocked(false);
               }
             }}
@@ -935,12 +1101,21 @@ export default function CallPage() {
           entries={entries}
           liveText={livePartial || (liveCaptions && !entries.length ? t("call.listening") : "")}
           liveSide="clerk"
+          large={channel === "in-person"}
+          clerkLabel={channel === "in-person" ? t("call.official") : undefined}
         />
-        {showIsl ? (
-          <div className="flex flex-col gap-2">
-            <ISLAvatar visible gloss={gloss} />
-          </div>
-        ) : null}
+        {/* Keep mounted when ISL is off — unmounting parks/destroys the WebGL
+            canvas and it comes back blank. Park off-screen instead. */}
+        <div
+          className={
+            showIsl
+              ? "flex flex-col gap-2"
+              : "pointer-events-none fixed left-[-10000px] top-0 h-[280px] w-[320px] opacity-0"
+          }
+          aria-hidden={!showIsl}
+        >
+          <ISLAvatar visible={showIsl} gloss={gloss} />
+        </div>
       </section>
 
       {/* Clerk Operator Status & Direct Sync Bar */}
@@ -959,7 +1134,7 @@ export default function CallPage() {
             />
           </span>
           <span className="font-semibold text-ink">
-            {clerkPeerConnected ? "Clerk Desk Online & Synchronized" : "Waiting for Clerk Desk..."}
+            {clerkPeerConnected ? t("call.clerk_on_line") : t("call.waiting_clerk")}
           </span>
         </div>
 
@@ -996,9 +1171,9 @@ export default function CallPage() {
         </form>
       </details>
 
-      {/* Response Station & Auto-Pilot Engine */}
+      {/* Response Station — Send alone speaks */}
       <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
-        {/* Auto-Pilot Intervention Alert */}
+        {/* Missing-fact intervention alert */}
         {needsIntervention && (
           <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
             <div className="flex items-center gap-2">
@@ -1007,44 +1182,6 @@ export default function CallPage() {
                 <strong className="font-bold">Intervention Needed:</strong>
                 <p className="mt-0.5">{interventionReason}</p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Auto-Pilot Speaking Countdown Bar */}
-        {autoCountdown !== null && !needsIntervention && (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-500/40 bg-teal-500/10 p-3 text-xs text-teal-900 dark:text-teal-200">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-teal-500" />
-              </span>
-              <div>
-                <span className="font-bold">🤖 Auto-Pilot speaking automatically in {autoCountdown}s</span>
-                <p className="text-[11px] opacity-80">Edit response below or select suggestion to pause.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (autoTimerRef.current) clearInterval(autoTimerRef.current);
-                  autoTimerRef.current = null;
-                  setAutoCountdown(null);
-                  setIsEditing(true);
-                  isEditingRef.current = true;
-                }}
-                className="rounded-lg bg-black/10 dark:bg-white/10 px-2.5 py-1 font-semibold hover:bg-black/20 transition-colors"
-              >
-                ⏸️ Pause
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSend()}
-                className="rounded-lg bg-teal-600 px-3 py-1 font-semibold text-white hover:bg-teal-500 shadow-sm transition-colors"
-              >
-                ⚡ Speak Now
-              </button>
             </div>
           </div>
         )}
@@ -1060,6 +1197,13 @@ export default function CallPage() {
           alwaysPresent={alwaysPresent}
           selectedId={selected?.id ?? null}
           onSelect={(suggestion) => {
+            if (suggestion.action === "dtmf" && suggestion.digit) {
+              handleDtmf(suggestion.digit);
+              setSelected(suggestion);
+              setDraftSentence("");
+              setBlocked(false);
+              return;
+            }
             setSelected(suggestion);
             setDraftSentence(suggestion.sentence);
             setOriginalSentence(suggestion.sentence);
@@ -1067,11 +1211,33 @@ export default function CallPage() {
             setIsEditing(false);
             isEditingRef.current = false;
             setNeedsIntervention(false);
-            if (autoPilotRef.current) {
-              triggerAutoSpeak(suggestion.sentence, 2.5);
-            }
           }}
         />
+
+        {isEmergency ? (
+          <div className="mt-3">
+            <p className="eyebrow mb-2">{t("call.quick_phrases")}</p>
+            <p className="mb-2 text-xs text-[var(--muted)]">{t("call.one_tap_hint")}</p>
+            <div className="flex flex-wrap gap-2">
+              {(getPlaybook(playbookId)?.quickPhrases ?? []).map((phrase) => {
+                const sentence =
+                  phrase.sentence[callLanguage] ?? phrase.sentence.en;
+                const label =
+                  phrase.label[uiLanguage] ?? phrase.label.en ?? phrase.id;
+                return (
+                  <button
+                    key={phrase.id}
+                    type="button"
+                    onClick={() => void handleSend(sentence)}
+                    className="min-h-12 rounded-full bg-danger px-4 text-sm font-semibold text-white"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {/* Live Editable Proposed Speech Area */}
         <div className="mt-4 rounded-2xl bg-paper p-4 shadow-sm border border-[var(--border)]">
@@ -1086,7 +1252,7 @@ export default function CallPage() {
               </span>
             ) : (
               <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-400">
-                ✨ Ready to speak
+                Ready — tap Send to speak
               </span>
             )}
           </div>
@@ -1103,11 +1269,6 @@ export default function CallPage() {
                 setDraftSentence(e.target.value);
                 setIsEditing(true);
                 isEditingRef.current = true;
-                if (autoTimerRef.current) {
-                  clearInterval(autoTimerRef.current);
-                  autoTimerRef.current = null;
-                }
-                setAutoCountdown(null);
               }}
               rows={3}
               placeholder={t("call.pick_suggestion")}
@@ -1174,6 +1335,19 @@ export default function CallPage() {
             <span>{t("call.send")}</span>
             <span className="text-sm opacity-70">↵ Speak</span>
           </button>
+          <UnmuteButton
+            unmuted={unmuted}
+            onToggle={() => {
+              setUnmuted((value) => {
+                const next = !value;
+                if (next) {
+                  transportRef.current?.stopSpeaking();
+                  cancelSpeakRef.current = null;
+                }
+                return next;
+              });
+            }}
+          />
         </div>
       </div>
 
@@ -1182,9 +1356,9 @@ export default function CallPage() {
         onClick={() => setShowKeypad((value) => !value)}
         className="mt-3 min-h-12 text-sm font-semibold text-signal"
       >
-        {showKeypad ? t("call.hide_keypad") : t("call.keypad")}
+        {showKeypad || channel === "phone-ivr" ? t("call.hide_keypad") : t("call.keypad")}
       </button>
-      {showKeypad ? (
+      {showKeypad || channel === "phone-ivr" ? (
         <div className="mt-2 pb-4">
           <DTMFPad onKey={handleDtmf} />
         </div>

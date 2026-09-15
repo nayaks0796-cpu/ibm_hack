@@ -1,12 +1,12 @@
 # TEAM_GUIDE.md — Who builds what, and how to use your agents
 
 Three people, three modules, one contract. Read `AGENTS.md` first — it defines every
-behaviour. If your agent wants to do something AGENTS.md doesn't define, stop and ask Tanis.
+behaviour. If your agent wants to do something AGENTS.md doesn't define, stop and ask Tanish M.
 
 ## Ownership
 
-### Tanis — Cursor — integration lead + the live call loop
-- `AGENTS.md` upkeep (only Tanis edits it)
+### Tanish M — Cursor — integration lead + the live call loop
+- `AGENTS.md` upkeep (only Tanish M edits it)
 - Live call screen: caption feed → reply suggestions → Send → TTS, Unmute barge-in
 - Final integration, demo script, pitch
 - Owns `main`: nothing merges without running the call loop once
@@ -23,15 +23,15 @@ shape in AGENTS.md. Setup is prefs only; playbook facts live on Start + optional
 
 ### Satyeta — Antigravity — plumbing + safety
 - Server endpoints: `/api/scribe-token`, `/api/tts` (with cancellation), `/api/suggest`,
-  `/api/gloss`, `/api/stt-fallback`
+  `/api/gloss`
 - `lib/guard/`: OTP/PIN blocker, reference-number detector, transcript redaction
-- Watson STT auto-switch on ElevenLabs quota error
+- ElevenLabs Scribe captions; if Scribe fails, typed clerk line still works
 - ISL avatar vendoring: CWASA player + SiGML files into `public/isl/`, one test sentence
 - Exotel stretch at the very end (only when steps 1–12 are green)
 
 **Satyeta's definition of done:** each endpoint has a curl example that works; guard has
 unit tests for "OTP is 482911" (blocked) and "complaint number COMP-4821" (detected);
-killing the ElevenLabs key mid-session flips captions to Watson without a reload.
+killing the ElevenLabs key shows captions off and the typed clerk-line path still works.
 
 ## Git repo
 
@@ -39,7 +39,7 @@ https://github.com/snk189/ibm_hack — this is the team repo. Clone it, do not s
 
 ## Git workflow
 
-- Branches: `tanis/call-loop`, `arya/screens`, `satyeta/plumbing`. Small commits.
+- Branches: `tanish/call-loop`, `arya/screens`, `satyeta/plumbing`. Small commits.
 - Pull `main` every few hours. Merge conflicts mean two people touched one module — stop
   and re-split instead of fighting.
 - Commit prefixes: `bob:` for IBM Bob work, otherwise `feat:` / `fix:` / `chore:`.
@@ -69,11 +69,11 @@ repo or run long agent loops — that burns all 50 coins in an afternoon.
 
 | Who | Bob task | Commit message |
 |---|---|---|
-| Tanis | Plan session over AGENTS.md + scaffold the Next.js app | `bob: add AGENTS.md contract and scaffold Setu app` |
+| Tanish M | Plan session over AGENTS.md + scaffold the Next.js app | `bob: add AGENTS.md contract and scaffold Setu app` |
 | Satyeta | `lib/watsonx/` client + the Llama reply-suggestion prompt | `bob: watsonx client + suggestion prompt` |
-| Satyeta | `lib/watson-stt/` backup client + auto-switch | `bob: watson stt fallback` |
+| Satyeta | `lib/watson-stt/` (historical Bob session; STT backup later dropped) | `bob: watson stt fallback` |
 | Arya | Outcome screen first pass (then polish in Antigravity) | `bob: outcome card screen` |
-| Tanis | Final review pass over the whole repo at the end | `bob: review` |
+| Tanish M | Final review pass over the whole repo at the end | `bob: review` |
 
 **Bob session rules:**
 - One named task per session. When it's done, close the session. No "one more thing."
@@ -86,9 +86,9 @@ repo or run long agent loops — that burns all 50 coins in an afternoon.
 
 ## Keys each person needs
 
-- **Everyone:** the shared `.env.local` from Tanis (sent privately, never committed).
-- **Satyeta additionally:** ElevenLabs dashboard access (Starter plan), watsonx.ai project
-  (Lite), Watson STT Lite instance on IBM Cloud.
+- **Everyone:** the shared `.env.local` from Tanish M (sent privately, never committed).
+- **Satyeta additionally:** ElevenLabs dashboard access (Starter plan). watsonx.ai is
+  optional (Groq is the default LLM). Do not provision Watson STT.
 
 ## The one-line product test (run before every merge to main)
 

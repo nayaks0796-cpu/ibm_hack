@@ -8,8 +8,7 @@ import {
   bootCwasa,
   detachCwasaHost,
   playSignWord,
-  playSigml,
-  glossToSigml,
+  refreshCwasaLayout,
 } from "@/lib/isl/cwasa";
 
 interface Props {
@@ -34,10 +33,14 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
   const [activeWord, setActiveWord] = useState("HELLO");
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [sequence, setSequence] = useState<string[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const seqIdRef = useRef(0);
+  // Last sign shown, tracked outside React state so the visibility effect can
+  // replay it without stale closures.
+  const activeWordRef = useRef("HELLO");
 
+  // Boot once on mount. Do not tear down WebGL when the user toggles ISL —
+  // the call page parks this panel off-screen instead of unmounting.
   useEffect(() => {
-    if (!visible) return;
     const slot = slotRef.current;
     if (!slot) return;
 
@@ -77,59 +80,84 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
       observer.disconnect();
       detachCwasaHost(slot);
     };
-  }, [visible]);
+  }, []);
 
-  // Sequential multi-sign animator
-  function playSequence(words: string[]) {
-    // Filter out isolated letters to prioritize full word signs (unless digits)
-    const signWords = words.filter((w) => w.length > 1 || /\d/.test(w));
-    const targetWords = signWords.length > 0 ? signWords : words.slice(0, 4);
-    if (targetWords.length === 0) return;
-    if (timerRef.current) clearInterval(timerRef.current);
+  // When ISL is turned back on, the WebGL drawing buffer has been cleared while
+  // the panel was parked off-screen, so the idle avatar shows as a blank canvas.
+  // Re-attach the host, force a layout pass, and REPLAY the current sign — a real
+  // Animgen play is the only thing that repaints the WebGL buffer.
+  useEffect(() => {
+    if (!visible) return;
+    const slot = slotRef.current;
+    if (slot) attachCwasaHost(slot);
 
-    setSequence(targetWords);
-    let idx = 0;
+    let cancelled = false;
+    const timers: number[] = [];
 
-    const playStep = (i: number) => {
-      if (i >= targetWords.length) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        setActiveIndex(null);
-        return;
+    const repaint = () => {
+      if (cancelled) return;
+      refreshCwasaLayout();
+      if (avatarCanvasReady()) {
+        if (status !== "ready") setStatus("ready");
+        void playSignWord(activeWordRef.current || "HELLO");
       }
-      const w = targetWords[i].toUpperCase();
-      setActiveWord(w);
-      setActiveIndex(i);
-      void playSignWord(w);
     };
 
-    playStep(0);
-    idx = 1;
+    // Retry a few times: boot may still be finishing when the panel returns.
+    timers.push(window.setTimeout(repaint, 60));
+    timers.push(window.setTimeout(repaint, 350));
+    timers.push(window.setTimeout(repaint, 900));
 
-    timerRef.current = setInterval(() => {
-      if (idx >= targetWords.length) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        setActiveIndex(null);
-        return;
-      }
-      playStep(idx);
-      idx += 1;
-    }, 2600);
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => clearTimeout(id));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // Sequential multi-sign animator — wait for each sign so Animgen is not overlapped.
+  async function playSequence(words: string[], seqId: number) {
+    const targetWords = words.map((w) => w.trim()).filter(Boolean);
+    if (targetWords.length === 0) return;
+
+    setSequence(targetWords);
+
+    for (let i = 0; i < targetWords.length; i += 1) {
+      if (seqIdRef.current !== seqId) return;
+      const w = targetWords[i].toUpperCase();
+      setActiveWord(w);
+      activeWordRef.current = w;
+      setActiveIndex(i);
+      await playSignWord(w);
+    }
+
+    if (seqIdRef.current === seqId) setActiveIndex(null);
   }
+
+  useEffect(() => {
+    if (status !== "ready" || gloss.length > 0) return;
+    activeWordRef.current = "HELLO";
+    void playSignWord("HELLO");
+  }, [status]);
 
   useEffect(() => {
     if ((status !== "ready" && !avatarCanvasReady()) || gloss.length === 0) return;
     if (status !== "ready" && avatarCanvasReady()) setStatus("ready");
-    playSequence(gloss);
+    const seqId = seqIdRef.current + 1;
+    seqIdRef.current = seqId;
+    void playSequence(gloss, seqId);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      seqIdRef.current += 1;
     };
   }, [gloss, status]);
 
   function playSingle(word: string, index?: number) {
-    if (timerRef.current) clearInterval(timerRef.current);
+    const seqId = seqIdRef.current + 1;
+    seqIdRef.current = seqId;
     const upper = word.toUpperCase();
     setActiveWord(upper);
+    activeWordRef.current = upper;
     setActiveIndex(index ?? null);
     void playSignWord(upper);
   }
@@ -138,9 +166,7 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
   return (
     <div
-      className={`relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-lg ${
-        visible ? "" : "hidden"
-      }`}
+      className="relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-lg"
     >
       {/* Avatar Viewport (Enlarged for clear visibility) */}
       <div className="relative h-[340px] sm:h-[380px] md:h-[420px] w-full overflow-hidden bg-[#0c0e12] flex items-center justify-center">
@@ -214,7 +240,11 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
             {sequence.length > 1 && (
               <button
                 type="button"
-                onClick={() => playSequence(sequence)}
+                onClick={() => {
+                  const seqId = seqIdRef.current + 1;
+                  seqIdRef.current = seqId;
+                  void playSequence(sequence, seqId);
+                }}
                 className="rounded-full bg-teal-500/20 border border-teal-400/30 px-2 py-0.5 text-[10px] text-teal-300 hover:bg-teal-500/30 ml-auto"
                 title="Replay all signs in sequence"
               >

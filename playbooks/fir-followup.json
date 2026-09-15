@@ -1,0 +1,40 @@
+{
+  "id": "fir-followup",
+  "icon": "search",
+  "category": "legal",
+  "channel": "phone-human",
+  "outcomeKind": "answer",
+  "title": {
+    "en": "FIR follow-up",
+    "hi": "एफआईआर फॉलो-अप",
+    "ta": "FIR பின்தொடர்தல்",
+    "te": "FIR ఫాలో-అప్",
+    "kn": "FIR ಫಾಲೋ-ಅಪ್",
+    "ml": "FIR ഫോളോ-അപ്പ്",
+    "mr": "FIR फॉलो-अप",
+    "bn": "FIR ফলো-আপ"
+  },
+  "goal": {
+    "en": "Get the current status of an already filed FIR",
+    "hi": "दर्ज FIR की वर्तमान स्थिति पता करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["FIR", "status", "investigation", "IO", "station", "एफआईआर", "स्थिति"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say you are following up on an FIR.", "hi": "परिचय दें और FIR के फॉलो-अप के लिए कॉल बताएँ।" },
+    { "id": "id", "en": "Give the FIR number when asked.", "hi": "पूछे जाने पर FIR नंबर दें।" },
+    { "id": "answer", "en": "Pin the status they give.", "hi": "जो स्थिति बताएँ, उसे पिन करें।" }
+  ],
+  "facts": [
+    {
+      "key": "fir_number",
+      "label": { "en": "FIR number", "hi": "एफआईआर नंबर" },
+      "required": true
+    },
+    {
+      "key": "police_station",
+      "label": { "en": "Police station", "hi": "थाना" },
+      "required": false
+    }
+  ]
+}

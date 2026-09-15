@@ -1,10 +1,19 @@
 // lib/transport/CallRoom.ts
-// Real-time synchronization layer between the User (/call) and Clerk (/clerk) interfaces.
-// Combines WebSocket relay (/api/room-relay) with BroadcastChannel cross-tab synchronization.
+// Real-time sync between User (/call) and Clerk (/clerk).
+// Transports: WebSocket relay, HTTP long-poll (works with `npm run dev`),
+// BroadcastChannel, and localStorage. Presence is an explicit hello/ack/heartbeat.
+
+export type CallRoomRole = "user" | "clerk";
 
 export type CallRoomMessage = (
   | { type: "clerk-caption"; text: string; isFinal?: boolean; timestamp?: number }
-  | { type: "user-tts"; text: string; audioBase64?: string; timestamp?: number }
+  | {
+      type: "user-tts";
+      text: string;
+      lang?: "hi" | "en";
+      audioBase64?: string;
+      timestamp?: number;
+    }
   | { type: "user-caption"; text: string; timestamp?: number }
   | { type: "dtmf"; digit: string; timestamp?: number }
   | { type: "line-state"; state: "active" | "silent" | "disconnected" }
@@ -18,29 +27,173 @@ export type CallRoomMessage = (
   | { type: "call-ended"; timestamp?: number }
   | { type: "peer-joined"; role: string; clientCount?: number }
   | { type: "peer-left"; role: string; clientCount?: number }
-  | { type: "room-joined"; roomId: string; role: string; clientCount?: number }
+  | {
+      type: "room-joined";
+      roomId: string;
+      role: string;
+      clientCount?: number;
+      peerRoles?: string[];
+    }
+  | { type: "hello"; role: CallRoomRole; timestamp?: number }
+  | { type: "hello-ack"; role: CallRoomRole; timestamp?: number }
+  | { type: "presence"; role: CallRoomRole; timestamp?: number }
+  | { type: "bye"; role: CallRoomRole; timestamp?: number }
 ) & { msgId?: string };
 
 export type MessageHandler = (msg: CallRoomMessage) => void;
+export type PeerHandler = (connected: boolean) => void;
 
 const GLOBAL_SEEN_MSG_IDS = new Set<string>();
+const HEARTBEAT_MS = 2000;
+const PEER_TIMEOUT_MS = 6000;
+
+function otherRole(role: CallRoomRole): CallRoomRole {
+  return role === "user" ? "clerk" : "user";
+}
+
+function isPresencePacket(
+  msg: CallRoomMessage
+): msg is CallRoomMessage & { type: "hello" | "hello-ack" | "presence" | "bye"; role: CallRoomRole } {
+  return (
+    msg.type === "hello" ||
+    msg.type === "hello-ack" ||
+    msg.type === "presence" ||
+    msg.type === "bye"
+  );
+}
 
 export class CallRoom {
   private ws: WebSocket | null = null;
   private channel: BroadcastChannel | null = null;
   private handlers = new Set<MessageHandler>();
+  private peerHandlers = new Set<PeerHandler>();
   private storageHandler: ((e: StorageEvent) => void) | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private pollAbort: AbortController | null = null;
+  private hubCursor = -1;
+  private wsRelayReady = false;
+  private wsJoinTimer: ReturnType<typeof setTimeout> | null = null;
+  private peerLastSeen = 0;
+  private peerConnected = false;
+  private started = false;
   private disposed = false;
   readonly roomId: string;
-  readonly role: "user" | "clerk";
+  readonly role: CallRoomRole;
+  readonly peerRole: CallRoomRole;
 
-  constructor(roomId: string = "demo-room", role: "user" | "clerk" = "user") {
+  constructor(roomId: string = "demo-room", role: CallRoomRole = "user") {
     this.roomId = roomId;
     this.role = role;
+    this.peerRole = otherRole(role);
     this.initBroadcastChannel();
-    this.connectWs();
     this.initStorageFallback();
+    this.connectWs();
+    queueMicrotask(() => this.startPresence());
+  }
+
+  get isPeerConnected(): boolean {
+    return this.peerConnected;
+  }
+
+  onPeerChange(handler: PeerHandler): () => void {
+    this.peerHandlers.add(handler);
+    handler(this.peerConnected);
+    return () => this.peerHandlers.delete(handler);
+  }
+
+  private presenceStorageKey(): string {
+    return `sampark_presence_${this.roomId}`;
+  }
+
+  private eventStorageKey(): string {
+    return `sampark_event_${this.roomId}`;
+  }
+
+  private startPresence(): void {
+    if (this.disposed || this.started) return;
+    this.started = true;
+    this.readStoredPresence();
+    this.announce();
+    if (typeof window === "undefined") return;
+    this.heartbeatTimer = setInterval(() => {
+      if (this.disposed) return;
+      this.sendPresence();
+      this.expirePeerIfStale();
+    }, HEARTBEAT_MS);
+    void this.pollLoop();
+  }
+
+  private readStoredPresence(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(this.presenceStorageKey());
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, number>;
+      const ts = parsed[this.peerRole];
+      if (typeof ts === "number" && Date.now() - ts < PEER_TIMEOUT_MS) {
+        this.notePeerSeen();
+      }
+    } catch {}
+  }
+
+  private writeStoredPresence(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const key = this.presenceStorageKey();
+      const parsed = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(key) || "{}") as Record<string, number>;
+        } catch {
+          return {} as Record<string, number>;
+        }
+      })();
+      parsed[this.role] = Date.now();
+      localStorage.setItem(key, JSON.stringify(parsed));
+    } catch {}
+  }
+
+  private announce(): void {
+    this.writeStoredPresence();
+    this.send({ type: "hello", role: this.role, timestamp: Date.now() });
+  }
+
+  private sendPresence(): void {
+    this.writeStoredPresence();
+    this.send({ type: "presence", role: this.role, timestamp: Date.now() });
+  }
+
+  private notePeerSeen(): void {
+    this.peerLastSeen = Date.now();
+    if (this.peerConnected) return;
+    this.peerConnected = true;
+    this.peerHandlers.forEach((handler) => {
+      try {
+        handler(true);
+      } catch (err) {
+        console.error("[CallRoom] peer handler error:", err);
+      }
+    });
+  }
+
+  private notePeerLost(): void {
+    if (!this.peerConnected) return;
+    this.peerConnected = false;
+    this.peerLastSeen = 0;
+    this.peerHandlers.forEach((handler) => {
+      try {
+        handler(false);
+      } catch (err) {
+        console.error("[CallRoom] peer handler error:", err);
+      }
+    });
+  }
+
+  private expirePeerIfStale(): void {
+    if (!this.peerConnected || !this.peerLastSeen) return;
+    if (Date.now() - this.peerLastSeen > PEER_TIMEOUT_MS) {
+      this.notePeerLost();
+    }
   }
 
   private initBroadcastChannel(): void {
@@ -50,7 +203,7 @@ export class CallRoom {
       this.channel.onmessage = (event: MessageEvent) => {
         const msg = event.data as CallRoomMessage;
         if (msg && typeof msg.type === "string") {
-          this.emit(msg);
+          this.ingest(msg);
         }
       };
     } catch {
@@ -60,13 +213,26 @@ export class CallRoom {
 
   private initStorageFallback(): void {
     if (typeof window === "undefined") return;
-    const storageKey = `sampark_event_${this.roomId}`;
+    const eventKey = this.eventStorageKey();
+    const presenceKey = this.presenceStorageKey();
     this.storageHandler = (e: StorageEvent) => {
-      if (e.key === storageKey && e.newValue) {
+      if (e.key === eventKey && e.newValue) {
         try {
-          const envelope = JSON.parse(e.newValue);
+          const envelope = JSON.parse(e.newValue) as {
+            sender?: string;
+            data?: CallRoomMessage;
+          };
           if (envelope.sender !== this.role && envelope.data) {
-            this.emit(envelope.data);
+            this.ingest(envelope.data);
+          }
+        } catch {}
+      }
+      if (e.key === presenceKey && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue) as Record<string, number>;
+          const ts = parsed[this.peerRole];
+          if (typeof ts === "number" && Date.now() - ts < PEER_TIMEOUT_MS) {
+            this.notePeerSeen();
           }
         } catch {}
       }
@@ -85,29 +251,85 @@ export class CallRoom {
       )}&role=${encodeURIComponent(this.role)}`;
 
       this.ws = new WebSocket(url);
+      this.wsRelayReady = false;
+
+      this.ws.onopen = () => {
+        // Only trust this socket after the custom relay sends room-joined.
+        this.wsJoinTimer = setTimeout(() => {
+          if (!this.wsRelayReady && this.ws) {
+            try {
+              this.ws.close();
+            } catch {}
+          }
+        }, 1500);
+      };
 
       this.ws.onmessage = (event: MessageEvent) => {
         try {
           const msg = JSON.parse(event.data) as CallRoomMessage;
-          this.emit(msg);
+          this.ingest(msg);
         } catch {}
       };
 
       this.ws.onclose = () => {
+        const wasReady = this.wsRelayReady;
+        this.ws = null;
+        this.wsRelayReady = false;
+        if (this.wsJoinTimer) {
+          clearTimeout(this.wsJoinTimer);
+          this.wsJoinTimer = null;
+        }
         if (!this.disposed) {
-          this.reconnectTimer = setTimeout(() => this.connectWs(), 2000);
+          this.reconnectTimer = setTimeout(
+            () => this.connectWs(),
+            wasReady ? 2000 : 8000
+          );
         }
       };
 
       this.ws.onerror = () => {
-        // ws errors are safely ignored; BroadcastChannel handles local communication
+        // HTTP long-poll + BroadcastChannel cover the case where WS is unavailable.
       };
     } catch {
       // Offline / purely local fallback
     }
   }
 
-  private emit(msg: CallRoomMessage): void {
+  private async pollLoop(): Promise<void> {
+    if (typeof window === "undefined") return;
+    this.pollAbort = new AbortController();
+
+    while (!this.disposed) {
+      try {
+        const after = this.hubCursor;
+        const res = await fetch(
+          `/api/room-relay?room=${encodeURIComponent(this.roomId)}&role=${encodeURIComponent(
+            this.role
+          )}&after=${after}`,
+          { signal: this.pollAbort.signal, cache: "no-store" }
+        );
+        if (!res.ok) {
+          await sleep(1500, this.pollAbort.signal);
+          continue;
+        }
+        const data = (await res.json()) as {
+          cursor?: number;
+          peers?: { user?: boolean; clerk?: boolean };
+          messages?: CallRoomMessage[];
+        };
+        if (typeof data.cursor === "number") this.hubCursor = data.cursor;
+        if (data.peers?.[this.peerRole]) this.notePeerSeen();
+        for (const msg of data.messages ?? []) {
+          if (msg && typeof msg.type === "string") this.ingest(msg);
+        }
+      } catch {
+        if (this.disposed) return;
+        await sleep(1500, this.pollAbort.signal);
+      }
+    }
+  }
+
+  private ingest(msg: CallRoomMessage): void {
     if (msg.msgId) {
       if (GLOBAL_SEEN_MSG_IDS.has(msg.msgId)) return;
       GLOBAL_SEEN_MSG_IDS.add(msg.msgId);
@@ -117,6 +339,53 @@ export class CallRoom {
       }
     }
 
+    if (msg.type === "room-joined") {
+      this.wsRelayReady = true;
+      if (this.wsJoinTimer) {
+        clearTimeout(this.wsJoinTimer);
+        this.wsJoinTimer = null;
+      }
+      this.announce();
+      this.forward(msg);
+      return;
+    }
+
+    if (msg.type === "peer-joined") {
+      if (msg.role === this.peerRole) {
+        this.notePeerSeen();
+        this.announce();
+      }
+      this.forward(msg);
+      return;
+    }
+
+    if (msg.type === "peer-left") {
+      if (msg.role === this.peerRole) {
+        this.notePeerLost();
+      }
+      this.forward(msg);
+      return;
+    }
+
+    if (isPresencePacket(msg)) {
+      if (msg.role !== this.peerRole) return;
+      if (msg.type === "bye") {
+        this.notePeerLost();
+        return;
+      }
+      this.notePeerSeen();
+      if (msg.type === "hello") {
+        this.send({ type: "hello-ack", role: this.role, timestamp: Date.now() });
+      }
+      return;
+    }
+
+    this.notePeerSeen();
+    this.forward(msg);
+  }
+
+  /** Deliver to page listeners. Dedup happens in ingest. */
+  private forward(msg: CallRoomMessage): void {
     this.handlers.forEach((h) => {
       try {
         h(msg);
@@ -126,38 +395,54 @@ export class CallRoom {
     });
   }
 
+  /** @internal tests inject inbound packets through ingest. */
+  emit(msg: CallRoomMessage): void {
+    this.ingest(msg);
+  }
+
   send(msg: CallRoomMessage): void {
     if (!msg.msgId) {
       msg.msgId = `${this.role}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     }
-    // Prevent self-echo across any transport
     GLOBAL_SEEN_MSG_IDS.add(msg.msgId);
 
-    // If WebSocket is actively open, route via WebSocket exclusively to prevent duplicate channel delivery
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.wsRelayReady && this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(msg));
-        return;
       } catch {}
     }
 
-    // Fallback: send via BroadcastChannel for instant local cross-tab sync when WS not ready
     if (this.channel) {
       try {
         this.channel.postMessage(msg);
-        return;
       } catch {}
     }
 
-    // Fallback 3: localStorage event if neither WS nor BroadcastChannel are active
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(
-          `sampark_event_${this.roomId}`,
+          this.eventStorageKey(),
           JSON.stringify({ sender: this.role, time: Date.now(), data: msg })
         );
       } catch {}
+      this.postHub(msg);
     }
+  }
+
+  private postHub(msg: CallRoomMessage): void {
+    try {
+      void fetch("/api/room-relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room: this.roomId,
+          role: this.role,
+          data: msg,
+          bye: msg.type === "bye",
+        }),
+        keepalive: true,
+      });
+    } catch {}
   }
 
   onMessage(handler: MessageHandler): () => void {
@@ -166,8 +451,30 @@ export class CallRoom {
   }
 
   disconnect(): void {
+    if (!this.disposed) {
+      try {
+        this.send({ type: "bye", role: this.role, timestamp: Date.now() });
+      } catch {}
+    }
     this.disposed = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.pollAbort) {
+      try {
+        this.pollAbort.abort();
+      } catch {}
+      this.pollAbort = null;
+    }
+    if (this.wsJoinTimer) {
+      clearTimeout(this.wsJoinTimer);
+      this.wsJoinTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       try {
         this.ws.close();
@@ -187,5 +494,32 @@ export class CallRoom {
       this.storageHandler = null;
     }
     this.handlers.clear();
+    this.peerHandlers.clear();
+    if (typeof window !== "undefined") {
+      try {
+        const key = this.presenceStorageKey();
+        const parsed = JSON.parse(localStorage.getItem(key) || "{}") as Record<
+          string,
+          number
+        >;
+        delete parsed[this.role];
+        localStorage.setItem(key, JSON.stringify(parsed));
+      } catch {}
+    }
   }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
+  });
 }

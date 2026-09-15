@@ -1,0 +1,40 @@
+{
+  "id": "bed-inquiry",
+  "icon": "bed",
+  "category": "health",
+  "channel": "phone-human",
+  "outcomeKind": "answer",
+  "title": {
+    "en": "Bed availability",
+    "hi": "बेड उपलब्धता",
+    "ta": "படுக்கை இருப்பு",
+    "te": "బెడ్ లభ్యత",
+    "kn": "ಹಾಸಿಗೆ ಲಭ್ಯತೆ",
+    "ml": "കിടക്ക ലഭ്യത",
+    "mr": "खाट उपलब्धता",
+    "bn": "শয্যা আছে কি"
+  },
+  "goal": {
+    "en": "Find out if an emergency or ward bed is free",
+    "hi": "आपातकालीन या वार्ड बेड खाली है या नहीं, पता करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["bed", "ICU", "ward", "available", "emergency", "बेड", "उपलब्ध", "वार्ड"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and ask if a bed is available.", "hi": "परिचय दें और पूछें कि बेड खाली है या नहीं।" },
+    { "id": "id", "en": "Give hospital name and ward or department.", "hi": "अस्पताल और वार्ड या विभाग बताएँ।" },
+    { "id": "answer", "en": "Pin the yes/no answer and any ward they name.", "hi": "हाँ/नहीं और वार्ड का नाम पिन करें।" }
+  ],
+  "facts": [
+    {
+      "key": "hospital_name",
+      "label": { "en": "Hospital name", "hi": "अस्पताल का नाम" },
+      "required": true
+    },
+    {
+      "key": "department",
+      "label": { "en": "Ward / department", "hi": "वार्ड / विभाग" },
+      "required": false
+    }
+  ]
+}

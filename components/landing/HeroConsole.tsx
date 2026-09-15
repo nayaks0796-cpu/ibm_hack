@@ -23,6 +23,9 @@ export default function HeroConsole() {
           <p className="font-serif text-2xl leading-snug">
             मैं आपकी कैसे सहायता कर सकता हूँ?
           </p>
+          <p className="rounded-full bg-signal/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-signal w-fit">
+            ISL · HELP
+          </p>
 
           <div className="flex h-10 items-end gap-1">
             {Array.from({ length: 18 }).map((_, i) => (

@@ -12,6 +12,7 @@ export interface NumberCapturedBannerProps {
   onDismiss?: () => void;
   /** UI language code */
   lang?: string;
+  mode?: "reference" | "answer";
 }
 
 export default function NumberCapturedBanner({
@@ -19,6 +20,7 @@ export default function NumberCapturedBanner({
   onConfirmPin,
   onDismiss,
   lang = "en",
+  mode = "reference",
 }: NumberCapturedBannerProps) {
   const [pinned, setPinned] = useState(false);
 
@@ -45,7 +47,11 @@ export default function NumberCapturedBanner({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-base font-semibold">
-          {t("call.pin_prompt", { ref: referenceNumber }, lang)}
+          {t(
+            mode === "answer" ? "call.pin_answer_prompt" : "call.pin_prompt",
+            { ref: referenceNumber },
+            lang
+          )}
         </p>
         <span className="rounded-full bg-paper px-3 py-1 font-mono text-sm font-bold text-ink">
           {referenceNumber}
@@ -68,7 +74,13 @@ export default function NumberCapturedBanner({
           </button>
         </div>
       ) : (
-        <p className="text-sm font-semibold">{t("call.pin_pinned", { ref: referenceNumber }, lang)}</p>
+        <p className="text-sm font-semibold">
+          {t(
+            mode === "answer" ? "call.pin_answer_pinned" : "call.pin_pinned",
+            { ref: referenceNumber },
+            lang
+          )}
+        </p>
       )}
     </div>
   );

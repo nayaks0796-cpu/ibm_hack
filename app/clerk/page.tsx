@@ -1,239 +1,320 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import BrandMark from "@/components/BrandMark";
+import CaptionFeed from "@/components/CaptionFeed";
+import ReplySuggestions from "@/components/ReplySuggestions";
+import SilenceRing, { type RingState } from "@/components/SilenceRing";
+import UnmuteButton from "@/components/UnmuteButton";
 import { applyUiLanguage, t, UI_LANGUAGES } from "@/lib/i18n";
-import type { UiLanguage } from "@/lib/types";
+import { getPlaybook, playbookTitle } from "@/lib/playbooks";
+import { loadProfile } from "@/lib/store";
+import { isEchoOfRecentTts, ttsHoldMs } from "@/lib/transport/echoGate";
 import { CallRoom, type CallRoomMessage } from "@/lib/transport/CallRoom";
 import { tryClaimSpeech } from "@/lib/transport/speechLock";
+import { applyUtteranceVoice } from "@/lib/transport/speechVoice";
+import type { ReplySuggestion, TranscriptEntry, UiLanguage } from "@/lib/types";
 
-interface MessageItem {
-  id: string;
-  side: "clerk" | "us";
-  text: string;
-  time: string;
-}
+const LINE_LABEL = {
+  active: "call.line_active",
+  silent: "call.line_silent",
+  disconnected: "call.line_disconnected",
+  ringing: "call.line_ringing",
+} as const;
 
-const PRESETS_HI = [
-  {
-    category: "Power Cut (बिजली विभाग)",
-    items: [
+const PRESETS: Record<
+  string,
+  Record<"hi" | "en", ReplySuggestion[]>
+> = {
+  "power-cut": {
+    en: [
       {
-        label: "स्वागत व समस्या पूछें",
-        text: "नमस्ते, बिजली सहायता केंद्र में आपका स्वागत है। बताइए क्या समस्या है?",
-      },
-      {
-        label: "उपभोक्ता संख्या पूछें",
-        text: "कृपया अपना उपभोक्ता नंबर (Consumer Number) बताइए।",
-      },
-      {
-        label: "इलाका / कॉलोनी पूछें",
-        text: "आप किस इलाके या कॉलोनी से बोल रहे हैं?",
-      },
-      {
-        label: "शिकायत संख्या दें (COMP-4821)",
-        text: "आपकी शिकायत दर्ज कर ली गई है। आपकी शिकायत संख्या COMP-4821 है।",
-      },
-    ],
-  },
-  {
-    category: "Bank / Cyber 1930 (बैंक / साइबर)",
-    items: [
-      {
-        label: "साइबर 1930 सहायता",
-        text: "नमस्ते, साइबर वित्तीय धोखाधड़ी 1930 हेल्पलाइन। क्या अनाधिकृत लेन-देन हुआ है?",
-      },
-      {
-        label: "खाता / कार्ड विवरण पूछें",
-        text: "कृपया अपने खाते या कार्ड के अंतिम चार अंक बताइए।",
-      },
-      {
-        label: "कार्ड ब्लॉक पुष्टि (REF-8842)",
-        text: "आपका कार्ड तुरंत ब्लॉक कर दिया गया है। आपका संदर्भ नंबर REF-8842 है।",
-      },
-    ],
-  },
-  {
-    category: "Hospital (अस्पताल अपॉइंटमेंट)",
-    items: [
-      {
-        label: "ओपीडी पूछताछ",
-        text: "नमस्ते, अस्पताल पूछताछ केंद्र। मरीज का नाम और कौन सा विभाग चाहिए?",
-      },
-      {
-        label: "टोकन संख्या दें (HOSP-309)",
-        text: "आपका ओपीडी स्लॉट बुक हो गया है। आपका टोकन नंबर HOSP-309 है।",
-      },
-    ],
-  },
-  {
-    category: "Safety & Refusal Tests (सुरक्षा परीक्षण)",
-    items: [
-      {
-        label: "OTP पूछें (सुरक्षा गार्ड टेस्ट)",
-        text: "सत्यापन के लिए आपके मोबाइल पर आया OTP 482911 बताइए।",
-      },
-      {
-        label: "मना करें (Refusal टेस्ट)",
-        text: "हम इस मामले में कुछ नहीं कर सकते, ऑफिस आकर मिलिए।",
-      },
-    ],
-  },
-];
-
-const PRESETS_EN = [
-  {
-    category: "Power Cut (Electricity Department)",
-    items: [
-      {
+        id: "s-greet",
         label: "Greet & ask problem",
-        text: "Hello, welcome to the Electricity Support Center. How can I assist you today?",
+        sentence:
+          "Hello, welcome to the Electricity Support Center. How can I assist you today?",
       },
       {
-        label: "Ask Consumer Number",
-        text: "Please provide your Consumer Number.",
+        id: "s-ask-id",
+        label: "Ask consumer number",
+        sentence: "Please provide your Consumer Number.",
       },
       {
-        label: "Ask Area / Locality",
-        text: "Which area or locality are you calling from?",
+        id: "s-ask-area",
+        label: "Ask area",
+        sentence: "Which area or locality are you calling from?",
       },
       {
-        label: "Provide Complaint Number (COMP-4821)",
-        text: "Your complaint has been registered. Your complaint number is COMP-4821.",
+        id: "s-complaint",
+        label: "Give complaint number",
+        sentence:
+          "Your complaint has been registered. Your complaint number is COMP-4821.",
+      },
+    ],
+    hi: [
+      {
+        id: "s-greet",
+        label: "स्वागत व समस्या पूछें",
+        sentence:
+          "नमस्ते, बिजली सहायता केंद्र में आपका स्वागत है। बताइए क्या समस्या है?",
+      },
+      {
+        id: "s-ask-id",
+        label: "उपभोक्ता संख्या पूछें",
+        sentence: "कृपया अपना उपभोक्ता नंबर (Consumer Number) बताइए।",
+      },
+      {
+        id: "s-ask-area",
+        label: "इलाका पूछें",
+        sentence: "आप किस इलाके या कॉलोनी से बोल रहे हैं?",
+      },
+      {
+        id: "s-complaint",
+        label: "शिकायत संख्या दें",
+        sentence:
+          "आपकी शिकायत दर्ज कर ली गई है। आपकी शिकायत संख्या COMP-4821 है।",
       },
     ],
   },
-  {
-    category: "Bank / Cyber 1930 Helpline",
-    items: [
+  bank: {
+    en: [
       {
+        id: "s-greet",
         label: "Cyber 1930 greeting",
-        text: "Hello, Cyber Financial Fraud Helpline 1930. Has an unauthorized transaction occurred?",
+        sentence:
+          "Hello, Cyber Financial Fraud Helpline 1930. Has an unauthorized transaction occurred?",
       },
       {
-        label: "Ask account / card digits",
-        text: "Please provide the last four digits of your account or card.",
+        id: "s-ask-id",
+        label: "Ask account digits",
+        sentence: "Please provide the last four digits of your account or card.",
       },
       {
-        label: "Card blocked confirmation (REF-8842)",
-        text: "Your card has been blocked immediately. Your reference number is REF-8842.",
+        id: "s-complaint",
+        label: "Give reference number",
+        sentence:
+          "Your card has been blocked immediately. Your reference number is REF-8842.",
+      },
+    ],
+    hi: [
+      {
+        id: "s-greet",
+        label: "साइबर 1930 सहायता",
+        sentence:
+          "नमस्ते, साइबर वित्तीय धोखाधड़ी 1930 हेल्पलाइन। क्या अनाधिकृत लेन-देन हुआ है?",
+      },
+      {
+        id: "s-ask-id",
+        label: "खाता अंक पूछें",
+        sentence: "कृपया अपने खाते या कार्ड के अंतिम चार अंक बताइए।",
+      },
+      {
+        id: "s-complaint",
+        label: "संदर्भ संख्या दें",
+        sentence:
+          "आपका कार्ड तुरंत ब्लॉक कर दिया गया है। आपका संदर्भ नंबर REF-8842 है।",
       },
     ],
   },
-  {
-    category: "Hospital Appointment",
-    items: [
+  hospital: {
+    en: [
       {
+        id: "s-greet",
         label: "OPD inquiry",
-        text: "Hello, Hospital Information Center. What is the patient's name and required department?",
+        sentence:
+          "Hello, Hospital Information Center. What is the patient's name and required department?",
       },
       {
-        label: "Provide token number (HOSP-309)",
-        text: "Your OPD appointment has been confirmed. Your token number is HOSP-309.",
+        id: "s-complaint",
+        label: "Give token number",
+        sentence:
+          "Your OPD appointment has been confirmed. Your token number is HOSP-309.",
+      },
+    ],
+    hi: [
+      {
+        id: "s-greet",
+        label: "ओपीडी पूछताछ",
+        sentence:
+          "नमस्ते, अस्पताल पूछताछ केंद्र। मरीज का नाम और कौन सा विभाग चाहिए?",
+      },
+      {
+        id: "s-complaint",
+        label: "टोकन संख्या दें",
+        sentence:
+          "आपका ओपीडी स्लॉट बुक हो गया है। आपका टोकन नंबर HOSP-309 है।",
       },
     ],
   },
-  {
-    category: "Safety & Refusal Tests",
-    items: [
-      {
-        label: "Ask OTP (Security Guard Test)",
-        text: "For verification, please provide the OTP 482911 sent to your mobile.",
-      },
-      {
-        label: "Refuse service (Refusal Test)",
-        text: "We cannot assist with this over the phone, please visit our office in person.",
-      },
-    ],
-  },
-];
+};
+
+function testSuggestions(callLanguage: "hi" | "en"): ReplySuggestion[] {
+  return callLanguage === "hi"
+    ? [
+        {
+          id: "always-otp",
+          label: "OTP पूछें",
+          sentence:
+            "सत्यापन के लिए आपके मोबाइल पर आया OTP 482911 बताइए।",
+        },
+        {
+          id: "always-refuse",
+          label: "मना करें",
+          sentence: "हम इस मामले में कुछ नहीं कर सकते, ऑफिस आकर मिलिए।",
+        },
+      ]
+    : [
+        {
+          id: "always-otp",
+          label: "Ask OTP",
+          sentence:
+            "For verification, please provide the OTP 482911 sent to your mobile.",
+        },
+        {
+          id: "always-refuse",
+          label: "Refuse service",
+          sentence:
+            "We cannot assist with this over the phone, please visit our office in person.",
+        },
+      ];
+}
 
 export default function ClerkPage() {
   const roomRef = useRef<CallRoom | null>(null);
-  const transcriptBottomRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<{
+    start: () => void;
+    stop: () => void;
+    lang: string;
+    onresult: ((event: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+    onerror: (() => void) | null;
+    onend: (() => void) | null;
+  } | null>(null);
 
-  const [roomId, setRoomId] = useState("demo-room");
-  const [callerName, setCallerName] = useState("Satya");
+  const [roomId] = useState("demo-room");
+  const [callerName, setCallerName] = useState("Caller");
+  const [playbookId, setPlaybookId] = useState("power-cut");
   const [playbookName, setPlaybookName] = useState("Power cut");
+  const [facts, setFacts] = useState<Record<string, string>>({});
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
   const [callLanguage, setCallLanguage] = useState<"hi" | "en">("en");
-  const [connected, setConnected] = useState(false);
-  const [peerCount, setPeerCount] = useState(1);
+  const [peerConnected, setPeerConnected] = useState(false);
   const [callActive, setCallActive] = useState(true);
-
-  const [messages, setMessages] = useState<MessageItem[]>([
-    {
-      id: "init-1",
-      side: "clerk",
-      text: "Operator station online. Waiting for caller...",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-    },
-  ]);
-
-  const [draft, setDraft] = useState("");
+  const [entries, setEntries] = useState<TranscriptEntry[]>([]);
+  const [selected, setSelected] = useState<ReplySuggestion | null>(null);
+  const [draftSentence, setDraftSentence] = useState("");
+  const [originalSentence, setOriginalSentence] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [livePartial, setLivePartial] = useState("");
   const [micSupported, setMicSupported] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
-  const recognitionRef = useRef<any>(null);
+  const [showFacts, setShowFacts] = useState(true);
 
   const speakerEnabledRef = useRef(speakerEnabled);
   speakerEnabledRef.current = speakerEnabled;
-
   const callLanguageRef = useRef(callLanguage);
   callLanguageRef.current = callLanguage;
+  const isListeningRef = useRef(isListening);
+  isListeningRef.current = isListening;
+  const echoUntilRef = useRef(0);
+  const lastUserTtsRef = useRef("");
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize CallRoom connection with stable dependencies
+  function clearEchoHoldTimer() {
+    if (holdTimerRef.current != null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
+
+  function restartClerkMic() {
+    if (!isListeningRef.current || Date.now() < echoUntilRef.current) return;
+    try {
+      recognitionRef.current?.start();
+    } catch {
+      // Already running.
+    }
+  }
+
+  function holdClerkMicForTts(text: string) {
+    const spoken = text.trim();
+    if (!spoken) return;
+    lastUserTtsRef.current = spoken;
+    const holdMs = ttsHoldMs(spoken);
+    echoUntilRef.current = Date.now() + holdMs;
+    setLivePartial("");
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Mic may already be idle.
+    }
+    clearEchoHoldTimer();
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null;
+      echoUntilRef.current = 0;
+      restartClerkMic();
+    }, holdMs);
+  }
+
+  useEffect(() => {
+    const profile = loadProfile();
+    if (profile.uiLanguage) {
+      setUiLanguage(applyUiLanguage(profile.uiLanguage));
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.add("clerk-console-root");
+    return () => {
+      document.documentElement.classList.remove("clerk-console-root");
+    };
+  }, []);
+
   useEffect(() => {
     const room = new CallRoom(roomId, "clerk");
     roomRef.current = room;
 
+    const unsubPeer = room.onPeerChange((connected) => {
+      setPeerConnected(connected);
+      if (connected) setCallActive(true);
+    });
+
     const unsubscribe = room.onMessage((msg: CallRoomMessage) => {
-      if (msg.type === "room-joined" || msg.type === "peer-joined") {
-        setConnected(true);
-        if (msg.clientCount) setPeerCount(msg.clientCount);
-      } else if (msg.type === "peer-left") {
-        if (msg.clientCount) setPeerCount(msg.clientCount);
-      } else if (msg.type === "session-sync") {
+      if (msg.type === "session-sync") {
         setCallerName(msg.callerName || "Caller");
+        setPlaybookId(msg.playbookId || "power-cut");
+        const playbook = getPlaybook(msg.playbookId || "power-cut");
         setPlaybookName(
-          msg.playbookId === "power-cut"
-            ? "Power cut"
-            : msg.playbookId === "bank"
-            ? "Bank / Cyber 1930"
-            : "Hospital"
+          playbook ? playbookTitle(playbook) : msg.playbookId || "Call"
         );
-        const nextLang = msg.callLanguage === "en" ? "en" : "hi";
+        setFacts(msg.facts ?? {});
+        const nextLang = msg.callLanguage === "hi" ? "hi" : "en";
         setCallLanguage(nextLang);
         callLanguageRef.current = nextLang;
         setCallActive(true);
       } else if (msg.type === "user-tts" || msg.type === "user-caption") {
-        const time = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-
-        // Deduplicate visual message addition
-        setMessages((prev) => {
+        setEntries((prev) => {
           const last = prev[prev.length - 1];
-          if (last && last.side === "us" && last.text === msg.text) {
-            return prev;
-          }
+          if (last && last.side === "us" && last.text === msg.text) return prev;
           return [
             ...prev,
             {
-              id: msg.msgId || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              t: msg.timestamp || Date.now(),
               side: "us",
+              source: msg.type === "user-tts" ? "tts-sent" : "user-voice",
               text: msg.text,
-              time,
+              redacted: false,
             },
           ];
         });
 
-        // Speak incoming message ONLY if this tab claims the single-speech lock
+        holdClerkMicForTts(msg.text);
+
+        // Same-laptop demo: /call already plays TTS. Do not re-speak here while
+        // the clerk mic is live, or Web Speech will caption our own voice.
         if (
           speakerEnabledRef.current &&
+          !isListeningRef.current &&
           typeof window !== "undefined" &&
           "speechSynthesis" in window &&
           tryClaimSpeech(msg.msgId)
@@ -241,20 +322,26 @@ export default function ClerkPage() {
           try {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(msg.text);
-            utterance.lang = callLanguageRef.current === "hi" ? "hi-IN" : "en-IN";
+            const speakLang =
+              msg.type === "user-tts" && (msg.lang === "hi" || msg.lang === "en")
+                ? msg.lang
+                : callLanguageRef.current;
+            applyUtteranceVoice(utterance, speakLang);
             utterance.rate = 1.0;
             window.speechSynthesis.speak(utterance);
-          } catch {}
+          } catch {
+            // Browser speech is optional for the clerk desk.
+          }
         }
       } else if (msg.type === "dtmf") {
-        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        setMessages((prev) => [
+        setEntries((prev) => [
           ...prev,
           {
-            id: `dtmf-${Date.now()}`,
+            t: Date.now(),
             side: "us",
-            text: `[DTMF TONE PRESSED: ${msg.digit}]`,
-            time,
+            source: "dtmf",
+            text: msg.digit,
+            redacted: false,
           },
         ]);
       } else if (msg.type === "call-ended") {
@@ -263,21 +350,52 @@ export default function ClerkPage() {
     });
 
     return () => {
+      unsubPeer();
       unsubscribe();
+      clearEchoHoldTimer();
       room.disconnect();
     };
   }, [roomId]);
 
-  // Auto-scroll transcript
-  useEffect(() => {
-    transcriptBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Set up Speech Recognition (Web Speech API)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      (window as unknown as {
+        SpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          start: () => void;
+          stop: () => void;
+          onresult: ((event: {
+            resultIndex: number;
+            results: ArrayLike<{
+              isFinal: boolean;
+              0: { transcript: string };
+            }>;
+          }) => void) | null;
+          onerror: (() => void) | null;
+          onend: (() => void) | null;
+        };
+        webkitSpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          start: () => void;
+          stop: () => void;
+          onresult: ((event: {
+            resultIndex: number;
+            results: ArrayLike<{
+              isFinal: boolean;
+              0: { transcript: string };
+            }>;
+          }) => void) | null;
+          onerror: (() => void) | null;
+          onend: (() => void) | null;
+        };
+      }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: new () => never })
+        .webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setMicSupported(false);
@@ -286,58 +404,103 @@ export default function ClerkPage() {
 
     try {
       const recognizer = new SpeechRecognition();
-      recognizer.continuous = false;
+      recognizer.continuous = true;
       recognizer.interimResults = true;
       recognizer.lang = callLanguage === "hi" ? "hi-IN" : "en-IN";
 
-      recognizer.onresult = (event: any) => {
-        let finalTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            setDraft(event.results[i][0].transcript);
-          }
+      recognizer.onresult = (event) => {
+        if (Date.now() < echoUntilRef.current) {
+          setLivePartial("");
+          return;
         }
-        if (finalTranscript) {
-          setDraft(finalTranscript);
-          sendClerkText(finalTranscript);
-          setIsListening(false);
+        let finalTranscript = "";
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const result = event.results[i];
+          if (result.isFinal) finalTranscript += result[0].transcript;
+          else interim += result[0].transcript;
+        }
+        const heard = finalTranscript.trim();
+        if (heard && isEchoOfRecentTts(heard, lastUserTtsRef.current)) {
+          setLivePartial("");
+          return;
+        }
+        setLivePartial(interim);
+        if (heard) {
+          setLivePartial("");
+          sendClerkText(finalTranscript, true);
         }
       };
 
       recognizer.onerror = () => {
         setIsListening(false);
+        setLivePartial("");
       };
 
       recognizer.onend = () => {
+        if (isListeningRef.current) {
+          if (Date.now() < echoUntilRef.current) return;
+          try {
+            recognizer.start();
+            return;
+          } catch {
+            // Fall through and mark the mic as off.
+          }
+        }
         setIsListening(false);
+        setLivePartial("");
       };
 
       recognitionRef.current = recognizer;
+      return () => {
+        try {
+          recognizer.onresult = null;
+          recognizer.onerror = null;
+          recognizer.onend = null;
+          recognizer.stop();
+        } catch {
+          // Ignore teardown errors from the Web Speech API.
+        }
+        if (recognitionRef.current === recognizer) {
+          recognitionRef.current = null;
+        }
+      };
     } catch {
       setMicSupported(false);
     }
   }, [callLanguage]);
 
-  function toggleSpeech() {
-    if (!recognitionRef.current) return;
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      setDraft("");
-      try {
-        recognitionRef.current.lang = callLanguage === "hi" ? "hi-IN" : "en-IN";
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch {
-        setIsListening(false);
-      }
-    }
-  }
+  const contextual = useMemo(
+    () =>
+      PRESETS[playbookId]?.[callLanguage] ?? PRESETS["power-cut"][callLanguage],
+    [playbookId, callLanguage]
+  );
+  const alwaysPresent = useMemo(
+    () => testSuggestions(callLanguage),
+    [callLanguage]
+  );
 
-  function handleSwitchLanguage(newUiLang: UiLanguage, newCallLang?: "hi" | "en") {
+  const displayEntries = useMemo(
+    () =>
+      entries.map((entry) => ({
+        ...entry,
+        side: entry.side === "clerk" ? ("us" as const) : ("clerk" as const),
+      })),
+    [entries]
+  );
+
+  const lineState: RingState = !callActive
+    ? "disconnected"
+    : peerConnected
+      ? "active"
+      : "ringing";
+
+  const playbook = getPlaybook(playbookId);
+
+  function handleSwitchLanguage(
+    newUiLang: UiLanguage,
+    newCallLang?: "hi" | "en"
+  ) {
     const targetCallLang: "hi" | "en" =
       newCallLang ?? (newUiLang === "hi" ? "hi" : "en");
 
@@ -346,60 +509,43 @@ export default function ClerkPage() {
     setCallLanguage(targetCallLang);
     callLanguageRef.current = targetCallLang;
 
+    const nextPlaybook = getPlaybook(playbookId);
+    if (nextPlaybook) {
+      setPlaybookName(playbookTitle(nextPlaybook, newUiLang));
+    }
+
     roomRef.current?.send({
       type: "session-sync",
       callerName,
-      playbookId: playbookName.toLowerCase().includes("power")
-        ? "power-cut"
-        : playbookName.toLowerCase().includes("bank")
-        ? "bank"
-        : "hospital",
+      playbookId,
       callLanguage: targetCallLang,
-      facts: {},
+      facts,
     });
   }
 
-  function repeatPreviousStatement() {
-    let lastClerkStatement = "";
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].side === "clerk" && messages[i].id !== "init-1") {
-        lastClerkStatement = messages[i].text;
-        break;
-      }
-    }
-
-    const textToRepeat =
-      lastClerkStatement.trim() ||
-      (callLanguage === "hi"
-        ? "नमस्ते, कृपया बताइए क्या समस्या है?"
-        : "Hello, please tell me how I can assist you today.");
-
-    sendClerkText(textToRepeat);
-  }
-
-  function sendClerkText(textToSend?: string) {
-    const text = (textToSend || draft).trim();
+  function sendClerkText(textToSend?: string, fromVoice = false) {
+    const text = (textToSend || draftSentence).trim();
     if (!text) return;
+    if (fromVoice && Date.now() < echoUntilRef.current) return;
+    if (fromVoice && isEchoOfRecentTts(text, lastUserTtsRef.current)) return;
 
-    const time = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-
-    setMessages((prev) => [
+    setEntries((prev) => [
       ...prev,
       {
-        id: `clerk-${Date.now()}`,
+        t: Date.now(),
         side: "clerk",
+        source: fromVoice ? "stt" : "tts-sent",
         text,
-        time,
+        redacted: false,
       },
     ]);
 
-    setDraft("");
+    if (fromVoice) {
+      setLivePartial("");
+    } else {
+      setIsEditing(false);
+    }
 
-    // Send through CallRoom to the User (/call)
     roomRef.current?.send({
       type: "clerk-caption",
       text,
@@ -408,9 +554,31 @@ export default function ClerkPage() {
     });
   }
 
-  function handleFormSubmit(e: FormEvent) {
-    e.preventDefault();
-    sendClerkText();
+  function toggleSpeech() {
+    if (!recognitionRef.current) {
+      setMicSupported(false);
+      return;
+    }
+    if (isListening) {
+      isListeningRef.current = false;
+      recognitionRef.current.stop();
+      setIsListening(false);
+      setLivePartial("");
+      return;
+    }
+    try {
+      // Stop clerk speaker so barge-in doesn't capture TTS as clerk speech.
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      recognitionRef.current.lang = callLanguage === "hi" ? "hi-IN" : "en-IN";
+      recognitionRef.current.start();
+      isListeningRef.current = true;
+      setIsListening(true);
+    } catch {
+      // Already started or brief browser glitch — keep mic available.
+      setIsListening(false);
+    }
   }
 
   function endCall() {
@@ -421,313 +589,375 @@ export default function ClerkPage() {
     });
   }
 
-  const activePresets = callLanguage === "hi" ? PRESETS_HI : PRESETS_EN;
+  const consoleStatus = !callActive
+    ? "Ended"
+    : peerConnected
+      ? "Live"
+      : "Waiting";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0d1217] text-slate-100 font-sans">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 bg-[#121922] px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BrandMark />
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                Sampark Clerk Console
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/20">
-                  Live Operator
-                </span>
-              </h1>
-              <p className="text-xs text-slate-400">
-                Official Desk Operator View • Room: <span className="font-mono text-emerald-300">{roomId}</span>
-              </p>
-            </div>
+    <main
+      key={`${uiLanguage}-${callLanguage}`}
+      className="clerk-console min-h-screen w-full pb-48"
+    >
+      <header className="clerk-console-banner">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+          <div className="min-w-0">
+            <p className="eyebrow text-signal">Sampark desk</p>
+            <h1 className="truncate font-serif text-3xl leading-none">
+              Clerk Console
+            </h1>
           </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSpeakerEnabled(!speakerEnabled)}
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                speakerEnabled
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                  : "border-slate-700 bg-slate-800 text-slate-400"
-              }`}
-            >
-              <span>{speakerEnabled ? "🔊 Operator Speaker ON" : "🔈 Operator Speaker Muted"}</span>
-            </button>
-
-            <Link
-              href="/call"
-              target="_blank"
-              className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-500/10 px-3.5 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/20"
-            >
-              <span>Open Caller App ↗</span>
-            </Link>
-
-            {callActive ? (
-              <button
-                type="button"
-                onClick={endCall}
-                className="rounded-full bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-600/30 transition-colors"
-              >
-                Disconnect Call
-              </button>
-            ) : (
-              <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
-                Call Ended
-              </span>
-            )}
-          </div>
+          <span
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] ${
+              peerConnected
+                ? "border-signal bg-signal/15 text-signal"
+                : callActive
+                  ? "border-highlight bg-highlight/15 text-highlight"
+                  : "border-[var(--border)] bg-raised text-[var(--muted)]"
+            }`}
+          >
+            <span className="relative flex h-2 w-2">
+              {callActive ? (
+                <span
+                  className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 ${
+                    peerConnected ? "bg-signal" : "bg-highlight"
+                  }`}
+                />
+              ) : null}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  peerConnected
+                    ? "bg-signal"
+                    : callActive
+                      ? "bg-highlight"
+                      : "bg-danger"
+                }`}
+              />
+            </span>
+            {consoleStatus}
+          </span>
         </div>
       </header>
 
-      {/* Dynamic In-Call Language Switcher Bar — Same as User (/call) */}
-      <div className="border-b border-slate-800/80 bg-[#0e141c] px-6 py-2.5">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          {/* Quick UI Language Selector */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-400 flex items-center gap-1 mr-1">
-              <span>🌐</span>
-              <span>{t("setup.ui_language") || "Language"}:</span>
-            </span>
-            {UI_LANGUAGES.map((lang) => {
-              const isCurrent = uiLanguage === lang.id;
-              return (
-                <button
-                  key={lang.id}
-                  type="button"
-                  id={`clerk-switch-lang-${lang.id}`}
-                  onClick={() => handleSwitchLanguage(lang.id)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                    isCurrent
-                      ? "bg-teal-500 text-black font-bold shadow-sm scale-105"
-                      : "bg-slate-800 text-slate-300 border border-slate-700 hover:text-white hover:border-teal-400"
-                  }`}
-                >
-                  {lang.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Spoken Voice Language Accent Toggle */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
-              <span>🗣️</span>
-              <span>Voice:</span>
-            </span>
-            <div className="inline-flex rounded-full bg-slate-800 p-0.5 border border-slate-700">
-              <button
-                type="button"
-                id="clerk-switch-voice-en"
-                onClick={() => handleSwitchLanguage(uiLanguage, "en")}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-all ${
-                  callLanguage === "en"
-                    ? "bg-teal-500 text-black shadow-sm"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                English
-              </button>
-              <button
-                type="button"
-                id="clerk-switch-voice-hi"
-                onClick={() => handleSwitchLanguage(uiLanguage, "hi")}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-all ${
-                  callLanguage === "hi"
-                    ? "bg-teal-500 text-black shadow-sm"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                हिन्दी
-              </button>
-            </div>
+      <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-5 sm:px-6">
+        <div className="flex items-center justify-between gap-3 animate-fade-up">
+        <div className="flex items-center gap-3">
+          <SilenceRing state={lineState} />
+          <div>
+            <p className="text-sm font-semibold">{t(LINE_LABEL[lineState])}</p>
+            <p className="text-xs text-[var(--muted)]">
+              {playbookName}
+              {callerName ? ` · ${callerName}` : ""}
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* Main Two-Column Layout */}
-      <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 p-6 lg:grid-cols-[1.3fr_1fr]">
-        {/* Left Column: Live Call Monitor & Transcript */}
-        <div className="flex flex-col rounded-2xl border border-slate-800 bg-[#121922] p-5 shadow-lg">
-          {/* Active Call Information Bar */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700/50 bg-[#0d1217] p-3.5 text-xs">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-              </span>
-              <div>
-                <span className="text-slate-400">Caller:</span>{" "}
-                <strong className="text-white font-semibold">{callerName}</strong>
-              </div>
-            </div>
-
-            <div>
-              <span className="text-slate-400">Playbook:</span>{" "}
-              <strong className="text-amber-300 font-semibold">{playbookName}</strong>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Spoken:</span>
-              <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-teal-300">
-                {callLanguage === "hi" ? "हिन्दी (HI)" : "English (EN)"}
-              </span>
-            </div>
-
-            <div className="text-slate-400">
-              Peers: <strong className="text-white">{peerCount}</strong>
-            </div>
-          </div>
-
-          {/* Transcript Feed */}
-          <div className="flex-1 overflow-y-auto space-y-3 rounded-xl bg-[#080c10] p-4 max-h-[460px] min-h-[360px] border border-slate-800/80">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${msg.side === "clerk" ? "items-end" : "items-start"}`}
-              >
-                <div className="flex items-center gap-2 px-1 text-[11px] text-slate-400 mb-1">
-                  <span>{msg.side === "clerk" ? "You (Operator)" : "Caller (Assistive Relay)"}</span>
-                  <span>•</span>
-                  <span>{msg.time}</span>
-                  {msg.side === "clerk" && (
-                    <button
-                      type="button"
-                      onClick={() => sendClerkText(msg.text)}
-                      className="ml-1 text-slate-500 hover:text-amber-300 text-[10px] font-medium"
-                      title="Repeat this message to caller"
-                    >
-                      🔁 Repeat
-                    </button>
-                  )}
-                </div>
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
-                    msg.side === "clerk"
-                      ? "bg-teal-700 text-white rounded-tr-none font-medium"
-                      : "bg-[#1d2633] text-slate-100 border border-slate-700/60 rounded-tl-none font-medium"
-                  }`}
-                >
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            <div ref={transcriptBottomRef} />
-          </div>
-
-          {/* Clerk Input Station */}
-          <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
-            <form onSubmit={handleFormSubmit} className="flex gap-2">
-              {micSupported && (
-                <button
-                  type="button"
-                  onClick={toggleSpeech}
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border transition-all ${
-                    isListening
-                      ? "border-red-500 bg-red-600 text-white shadow-lg animate-pulse"
-                      : "border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-600 hover:bg-slate-700"
-                  }`}
-                  title={isListening ? "Listening... click to stop" : "Speak to caller"}
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                    />
-                  </svg>
-                </button>
-              )}
-
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={
-                  isListening
-                    ? callLanguage === "hi"
-                      ? "आपकी आवाज़ सुन रहे हैं..."
-                      : "Listening to your voice..."
-                    : callLanguage === "hi"
-                    ? "ऑपरेटर संदेश लिखें या बोलें..."
-                    : "Type operator message or state query..."
-                }
-                className="flex-1 rounded-xl border border-slate-700 bg-[#080c10] px-4 text-sm text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-              />
-
-              <button
-                type="button"
-                id="clerk-repeat-prev-btn"
-                onClick={repeatPreviousStatement}
-                className="rounded-xl bg-amber-500/20 border border-amber-400/40 px-3.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition-all flex items-center gap-1.5"
-                title="Repeat previous operator statement to caller"
-              >
-                <span>🔁</span>
-                <span className="hidden sm:inline">
-                  {callLanguage === "hi" ? "दोहराएं" : "Repeat"}
-                </span>
-              </button>
-
-              <button
-                type="submit"
-                className="rounded-xl bg-teal-600 px-5 text-sm font-semibold text-white shadow-md hover:bg-teal-500 active:scale-95 transition-all"
-              >
-                {callLanguage === "hi" ? "भेजें" : "Send"}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Right Column: Canned Prompts & Fast Demo Controls */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-[#121922] p-5 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-teal-400">
-                Quick Operator Prompts
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-400">
-                One-click templates ({callLanguage === "hi" ? "हिन्दी" : "English"})
-              </p>
-            </div>
-
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {peerConnected ? (
+            <span className="rounded-full bg-signal/15 px-3 py-1 text-xs font-semibold text-signal">
+              {t("call.live_captions")}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            id="clerk-mic-toggle"
+            onClick={toggleSpeech}
+            disabled={!micSupported}
+            aria-pressed={isListening}
+            title={
+              micSupported
+                ? isListening
+                  ? "Stop speaking — mic is live"
+                  : "Speak with your mic — captions go to the caller"
+                : "Mic speech is not supported in this browser. Type a reply and tap Send."
+            }
+            className={`min-h-11 rounded-full px-3.5 text-xs font-semibold transition-all ${
+              !micSupported
+                ? "cursor-not-allowed border border-[var(--border)] bg-raised text-[var(--muted)] opacity-60"
+                : isListening
+                  ? "bg-danger text-white shadow-sm border border-danger animate-pulse"
+                  : "border border-signal bg-signal/15 text-signal hover:-translate-y-0.5"
+            }`}
+          >
+            {isListening ? "Mic: LIVE" : "Mic: speak"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSpeakerEnabled((value) => !value)}
+            aria-pressed={speakerEnabled}
+            className={`min-h-11 rounded-full px-3.5 text-xs font-semibold transition-all ${
+              speakerEnabled
+                ? "bg-signal text-paper shadow-sm border border-signal"
+                : "border border-[var(--border)] bg-raised text-[var(--muted)]"
+            }`}
+          >
+            {speakerEnabled ? "Speaker: ON" : "Speaker: OFF"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFacts((value) => !value)}
+            aria-pressed={showFacts}
+            className={`min-h-11 rounded-full px-4 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5 ${
+              showFacts
+                ? "bg-ink text-paper"
+                : "border border-[var(--border)] bg-raised text-ink"
+            }`}
+          >
+            {showFacts ? "Facts on" : "Facts off"}
+          </button>
+          {callActive ? (
             <button
               type="button"
-              onClick={repeatPreviousStatement}
-              className="rounded-lg bg-amber-500/20 border border-amber-400/30 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 flex items-center gap-1"
+              onClick={endCall}
+              className="min-h-11 rounded-full bg-danger px-4 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
             >
-              <span>🔁 Repeat Last</span>
+              {t("call.end")}
             </button>
-          </div>
+          ) : (
+            <span className="rounded-full bg-raised px-4 py-2 text-xs font-semibold text-[var(--muted)]">
+              {t("call.line_disconnected")}
+            </span>
+          )}
+        </div>
+      </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 max-h-[560px]">
-            {activePresets.map((group) => (
-              <div key={group.category} className="rounded-xl border border-slate-800/80 bg-[#080c10] p-3.5">
-                <h3 className="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
-                  <span>{group.category}</span>
-                </h3>
-                <div className="space-y-1.5">
-                  {group.items.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => sendClerkText(item.text)}
-                      className="group flex w-full flex-col rounded-lg border border-slate-800 bg-[#101720] p-2.5 text-left transition-colors hover:border-teal-500/50 hover:bg-[#15202c]"
-                    >
-                      <span className="text-xs font-medium text-teal-300 group-hover:text-teal-200">
-                        {item.label}
-                      </span>
-                      <span className="mt-0.5 text-[11px] text-slate-400 line-clamp-2">
-                        &ldquo;{item.text}&rdquo;
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+      {!peerConnected && callActive ? (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] border-l-4 border-l-highlight bg-raised px-4 py-4">
+          <p className="text-sm font-semibold">{t("call.waiting_caller")}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("call.waiting_caller_hint")}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-card/90 backdrop-blur-sm px-4 py-2.5 shadow-sm animate-fade-up">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1 mr-1">
+            <span>🌐</span>
+            <span>{t("setup.ui_language") || "Language"}:</span>
+          </span>
+          {UI_LANGUAGES.map((lang) => {
+            const isCurrent = uiLanguage === lang.id;
+            return (
+              <button
+                key={lang.id}
+                type="button"
+                id={`clerk-switch-lang-${lang.id}`}
+                onClick={() => handleSwitchLanguage(lang.id)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  isCurrent
+                    ? "bg-[var(--signal)] text-white font-semibold shadow-sm scale-105"
+                    : "bg-paper text-[var(--muted)] border border-[var(--border)] hover:text-ink hover:border-[var(--signal)]"
+                }`}
+              >
+                {lang.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[var(--muted)] flex items-center gap-1">
+            <span>🗣️</span>
+            <span>Voice:</span>
+          </span>
+          <div className="inline-flex rounded-full bg-paper p-0.5 border border-[var(--border)]">
+            <button
+              type="button"
+              id="clerk-switch-voice-en"
+              onClick={() => handleSwitchLanguage(uiLanguage, "en")}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-all ${
+                callLanguage === "en"
+                  ? "bg-ink text-paper shadow-sm"
+                  : "text-[var(--muted)] hover:text-ink"
+              }`}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              id="clerk-switch-voice-hi"
+              onClick={() => handleSwitchLanguage(uiLanguage, "hi")}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-all ${
+                callLanguage === "hi"
+                  ? "bg-ink text-paper shadow-sm"
+                  : "text-[var(--muted)] hover:text-ink"
+              }`}
+            >
+              हिन्दी
+            </button>
           </div>
         </div>
       </div>
-    </div>
+
+      <section
+        className={`mt-4 grid min-h-0 flex-1 gap-4 ${
+          showFacts ? "md:grid-cols-[1fr_380px] lg:grid-cols-[1fr_420px]" : ""
+        }`}
+      >
+        <CaptionFeed
+          entries={displayEntries}
+          liveText={
+            livePartial ||
+            (isListening ? t("call.listening") : "")
+          }
+          liveSide="us"
+          emptyText={
+            peerConnected
+              ? micSupported
+                ? "Tap Mic: speak in the header, or pick a reply and Send."
+                : "Pick a reply suggestion, edit if needed, then Send."
+              : "Waiting for the caller…"
+          }
+          usLabel={t("call.you")}
+          clerkLabel="Caller"
+        />
+        {showFacts ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex min-h-[16rem] flex-1 flex-col overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-raised">
+              <div className="border-b border-[var(--border)] px-4 py-3">
+                <p className="eyebrow">Caller facts</p>
+                <p className="mt-1 font-serif text-2xl leading-snug">
+                  {callerName}
+                </p>
+                <p className="mt-1 text-sm text-[var(--muted)]">{playbookName}</p>
+              </div>
+              <div className="flex flex-1 flex-col gap-3 p-4">
+                {playbook?.facts.length ? (
+                  playbook.facts.map((fact) => (
+                    <div key={fact.key}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                        {fact.label[uiLanguage] ?? fact.label.en}
+                      </p>
+                      <p className="mt-1 font-serif text-lg">
+                        {facts[fact.key]?.trim() || "—"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">
+                    Facts appear here when the caller starts the call.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-card px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2.5 text-xs">
+          <span className="relative flex h-2.5 w-2.5">
+            <span
+              className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+                peerConnected ? "bg-emerald-400" : "bg-teal-400"
+              }`}
+            />
+            <span
+              className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                peerConnected ? "bg-emerald-500" : "bg-teal-500"
+              }`}
+            />
+          </span>
+          <span className="font-semibold text-ink">
+            {peerConnected
+              ? "Caller Online & Synchronized"
+              : "Waiting for caller…"}
+          </span>
+        </div>
+
+        <Link
+          href="/call"
+          target="_blank"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--signal)] bg-signal/10 px-3 py-1.5 text-xs font-semibold text-[var(--signal)] hover:bg-signal/15 transition-colors"
+        >
+          Open Caller App ↗
+        </Link>
+      </div>
+
+      <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
+        <ReplySuggestions
+          suggestions={contextual}
+          alwaysPresent={alwaysPresent}
+          selectedId={selected?.id ?? null}
+          onSelect={(suggestion) => {
+            setSelected(suggestion);
+            setDraftSentence(suggestion.sentence);
+            setOriginalSentence(suggestion.sentence);
+            setIsEditing(false);
+          }}
+        />
+      </div>
+      </div>
+
+      {/* Sticky compose + speak bar — always in view so the clerk can talk */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-paper/95 px-4 py-3 shadow-[0_-18px_40px_rgba(0,0,0,0.45)] backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
+          {isListening ? (
+            <p className="text-center text-xs font-semibold text-danger">
+              Mic is live — speak now. Captions go to the caller automatically.
+            </p>
+          ) : null}
+          {!micSupported ? (
+            <p className="text-center text-xs font-medium text-[var(--muted)]">
+              This browser cannot use the mic. Type below and tap Send.
+            </p>
+          ) : null}
+          <div className="rounded-2xl border border-[var(--border)] bg-raised px-3 py-2">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-semibold text-[var(--muted)]">
+                {t("call.selected_hint")} (Editable)
+              </span>
+              {isEditing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftSentence(originalSentence || selected?.sentence || "");
+                    setIsEditing(false);
+                  }}
+                  className="rounded-full border border-[var(--border)] bg-paper px-2.5 py-0.5 text-xs font-semibold text-ink"
+                >
+                  Reset draft
+                </button>
+              ) : (
+                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 font-medium text-emerald-700">
+                  Ready — Send or Mic
+                </span>
+              )}
+            </div>
+            <textarea
+              id="clerk-speech-draft"
+              value={draftSentence}
+              onChange={(e) => {
+                setDraftSentence(e.target.value);
+                setIsEditing(true);
+              }}
+              rows={2}
+              placeholder={
+                micSupported
+                  ? "Type here, or tap Mic: speak / Unmute"
+                  : t("call.pick_suggestion")
+              }
+              className="field w-full font-serif text-lg leading-snug resize-none rounded-xl border-0 bg-transparent p-1 focus:outline-none"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              id="clerk-send-btn"
+              onClick={() => sendClerkText()}
+              disabled={!draftSentence.trim()}
+              className="gold-btn min-h-14 flex-1 text-lg flex items-center justify-center gap-2"
+            >
+              <span>{t("call.send")}</span>
+              <span className="text-sm opacity-70">↵ Speak</span>
+            </button>
+            <UnmuteButton
+              unmuted={isListening}
+              onToggle={toggleSpeech}
+              disabled={!micSupported}
+            />
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }

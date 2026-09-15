@@ -1,0 +1,40 @@
+{
+  "id": "ration",
+  "icon": "store",
+  "category": "government",
+  "channel": "in-person",
+  "outcomeKind": "acknowledged",
+  "title": {
+    "en": "Ration shop",
+    "hi": "राशन दुकान",
+    "ta": "ரேஷன் கடை",
+    "te": "రేషన్ షాప్",
+    "kn": "ರೇಷನ್ ಅಂಗಡಿ",
+    "ml": "റേഷൻ കട",
+    "mr": "रेशन दुकान",
+    "bn": "রেশন দোকান"
+  },
+  "goal": {
+    "en": "Collect ration or resolve a ration-card issue at the counter",
+    "hi": "काउंटर पर राशन लें या राशन कार्ड की समस्या हल करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["ration", "FPS", "PDS", "card", "राशन", "कार्ड"],
+  "stages": [
+    { "id": "intro", "en": "Place the phone facing the counter and introduce.", "hi": "फोन काउंटर की ओर रखें और परिचय दें।" },
+    { "id": "id", "en": "Show or say the ration card number when asked.", "hi": "पूछे जाने पर राशन कार्ड नंबर बताएँ।" },
+    { "id": "done", "en": "Confirm what was given or what to do next.", "hi": "क्या मिला और आगे क्या करना है, पुष्टि करें।" }
+  ],
+  "facts": [
+    {
+      "key": "ration_card",
+      "label": { "en": "Ration card number", "hi": "राशन कार्ड नंबर" },
+      "required": true
+    },
+    {
+      "key": "area",
+      "label": { "en": "Shop / area", "hi": "दुकान / क्षेत्र" },
+      "required": false
+    }
+  ]
+}

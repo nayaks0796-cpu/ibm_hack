@@ -10,25 +10,23 @@ See [`AGENTS.md`](AGENTS.md) for the full product contract and [`TEAM_GUIDE.md`]
 cp .env.local.example .env.local  # fill in your API keys
 npm install
 npm run dev      # Next.js app (demo call loop works without keys)
-npm run dev:ws   # optional Watson STT WebSocket proxy in server.js
+npm run dev:ws   # optional room-relay WebSocket in server.js (HTTP long-poll works without it)
 ```
 
 ## Environment variables
 
-See `.env.local` (shared privately by Tanis — never commit it):
+See `.env.local` (shared privately by Tanish M — never commit it):
 
 ```
 ELEVENLABS_API_KEY=
 ELEVENLABS_VOICE_ID_HI=
 ELEVENLABS_VOICE_ID_EN=
 LLM_PROVIDER=groq
-GROQ_API_KEY=                 # console.groq.com — Llama 3.3 70B, free tier
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_API_KEY=                 # console.groq.com — openai/gpt-oss-120b
+GROQ_MODEL=openai/gpt-oss-120b
 # Optional: watsonx if you have IBM keys (LLM_PROVIDER=watsonx)
 WATSONX_API_KEY=
 WATSONX_PROJECT_ID=
-WATSON_STT_API_KEY=
-WATSON_STT_URL=
 ```
 
 ## Credits

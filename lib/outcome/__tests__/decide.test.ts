@@ -38,7 +38,7 @@ describe("decideCallOutcome", () => {
         transcript: [clerk("Your complaint number is COMP-4821.")],
         refused: false,
       })
-    ).toEqual({ result: "resolved", referenceNumber: "COMP-4821" });
+    ).toEqual({ result: "resolved", referenceNumber: "COMP-4821", capturedAnswer: null });
   });
 
   test("never invents a complaint number", () => {
@@ -48,7 +48,7 @@ describe("decideCallOutcome", () => {
         transcript: [clerk("Please hold.")],
         refused: false,
       })
-    ).toEqual({ result: "incomplete", referenceNumber: null });
+    ).toEqual({ result: "incomplete", referenceNumber: null, capturedAnswer: null });
   });
 
   test("no clerk speech is no-answer", () => {
@@ -58,16 +58,66 @@ describe("decideCallOutcome", () => {
         transcript: [],
         refused: false,
       })
-    ).toEqual({ result: "no-answer", referenceNumber: null });
+    ).toEqual({ result: "no-answer", referenceNumber: null, capturedAnswer: null });
   });
 
-  test("refusal wins even if a number was pinned", () => {
+  test("refusal wins even if a clerk number was pinned", () => {
     expect(
       decideCallOutcome({
         pinnedReferenceNumber: "COMP-4821",
-        transcript: [clerk("We cannot help.")],
+        transcript: [clerk("We cannot help. Your number was COMP-4821.")],
         refused: true,
       })
-    ).toEqual({ result: "refused", referenceNumber: "COMP-4821" });
+    ).toEqual({ result: "refused", referenceNumber: "COMP-4821", capturedAnswer: null });
+  });
+
+  test("drops a pinned number the clerk never said", () => {
+    expect(
+      decideCallOutcome({
+        pinnedReferenceNumber: "COMP-4821",
+        transcript: [clerk("Please hold on.")],
+        refused: false,
+      })
+    ).toEqual({ result: "incomplete", referenceNumber: null, capturedAnswer: null });
+  });
+
+  test("pinned answer is answered, never invents a number", () => {
+    expect(
+      decideCallOutcome({
+        pinnedReferenceNumber: null,
+        pinnedAnswer: "Bed available in ICU",
+        transcript: [clerk("Yes, a bed is available in ICU.")],
+        refused: false,
+        outcomeKind: "answer",
+      })
+    ).toEqual({
+      result: "answered",
+      referenceNumber: null,
+      capturedAnswer: "Bed available in ICU",
+    });
+  });
+
+  test("emergency with both sides speaking is resolved as help dispatched", () => {
+    expect(
+      decideCallOutcome({
+        pinnedReferenceNumber: null,
+        transcript: [
+          clerk("Police control room."),
+          {
+            t: 2,
+            side: "us",
+            source: "tts-sent",
+            text: "Please send police.",
+            redacted: false,
+          },
+        ],
+        refused: false,
+        emergency: true,
+      })
+    ).toEqual({
+      result: "resolved",
+      referenceNumber: null,
+      capturedAnswer: "Help dispatched",
+    });
   });
 });

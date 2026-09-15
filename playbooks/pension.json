@@ -1,0 +1,40 @@
+{
+  "id": "pension",
+  "icon": "landmark",
+  "category": "government",
+  "channel": "phone-human",
+  "outcomeKind": "answer",
+  "title": {
+    "en": "Pension",
+    "hi": "पेंशन",
+    "ta": "ஓய்வூதியம்",
+    "te": "పెన్షన్",
+    "kn": "ಪಿಂಚಣಿ",
+    "ml": "പെൻഷൻ",
+    "mr": "निवृत्तिवेतन",
+    "bn": "পেনশন"
+  },
+  "goal": {
+    "en": "Check pension status or the next payment date",
+    "hi": "पेंशन की स्थिति या अगली भुगतान तारीख पता करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["pension", "PPO", "EPFO", "payment", "पेंशन", "पीपीओ"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say you are calling about pension status.", "hi": "परिचय दें और पेंशन स्थिति के लिए कॉल बताएँ।" },
+    { "id": "id", "en": "Give PPO or pension number when asked.", "hi": "पूछे जाने पर पीपीओ या पेंशन नंबर दें।" },
+    { "id": "answer", "en": "Pin the status or next payment date they give.", "hi": "स्थिति या अगली तारीख पिन करें।" }
+  ],
+  "facts": [
+    {
+      "key": "ppo_number",
+      "label": { "en": "PPO / pension number", "hi": "पीपीओ / पेंशन नंबर" },
+      "required": true
+    },
+    {
+      "key": "pensioner_name",
+      "label": { "en": "Pensioner name", "hi": "पेंशनधारक का नाम" },
+      "required": false
+    }
+  ]
+}

@@ -1,6 +1,17 @@
 import { t } from "../i18n";
 import { missingFactSentence } from "../format";
-import type { AccessNeed, CallLanguage, ReplySuggestion } from "../types";
+import {
+  clerkSpokenReferenceNumbers,
+  detectReferenceNumbers,
+} from "../guard/refnum";
+import { getPlaybook } from "../playbooks";
+import type {
+  AccessNeed,
+  CallLanguage,
+  PlaybookChannel,
+  ReplySuggestion,
+  TranscriptEntry,
+} from "../types";
 
 export type ClerkIntent =
   | "confused"
@@ -10,8 +21,10 @@ export type ClerkIntent =
   | "ask-when"
   | "ask-problem"
   | "ask-details"
+  | "ivr-menu"
   | "hold"
   | "greeting"
+  | "gave-reference"
   | "unknown";
 
 type Give = (hi: string, en: string) => string;
@@ -51,6 +64,11 @@ export function detectClerkIntent(caption: string): ClerkIntent {
     has(/kya kar rahe|kya ho raha/)
   ) {
     return "confused";
+  }
+
+  // Clerk actually issued a complaint/reference number — never from our side.
+  if (detectReferenceNumbers(caption).length > 0) {
+    return "gave-reference";
   }
 
   if (
@@ -99,9 +117,18 @@ export function detectClerkIntent(caption: string): ClerkIntent {
   }
 
   if (
+    has(/press [0-9*#]/) ||
+    has(/for [a-z].{0,40} press [0-9*#]/) ||
+    has(/दबाएँ|दबायें|दबाए/) ||
+    has(/option [0-9]/)
+  ) {
+    return "ivr-menu";
+  }
+
+  if (
     has(/please hold|hold (on|the line)/) ||
     has(/one (minute|moment|second)/) ||
-    has(/transfer(ring)?|connecting|press [0-9]/) ||
+    has(/transfer(ring)?|connecting/) ||
     has(/रुकिए|एक मिनट|होल्ड|कनेक्ट/)
   ) {
     return "hold";
@@ -124,6 +151,21 @@ const TASK_TERMS: Record<string, RegExp> = {
     /hospital|doctor|appoint|emergency|patient|bed|department|clinic|अस्पताल|डॉक्टर|अपॉइंट|मरीज|आपातकाल|विभाग/,
 };
 
+function taskTermsFor(playbookId: string): RegExp {
+  if (TASK_TERMS[playbookId]) return TASK_TERMS[playbookId];
+  const playbook = getPlaybook(playbookId);
+  const terms = playbook?.keyterms ?? [];
+  if (terms.length === 0) return TASK_TERMS["power-cut"];
+  const escaped = terms
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  try {
+    return new RegExp(escaped, "i");
+  } catch {
+    return TASK_TERMS["power-cut"];
+  }
+}
+
 const ON_TASK_PROCESS =
   /register|complaint|ticket|reference|checking|looking|noted|note down|filing|\bfile\b|system|hold|wait|transfer|connecting|press |option |menu |taking (this|your)|write (this|it)|शिकायत|दर्ज|रजिस्टर/;
 
@@ -140,6 +182,8 @@ const ON_TASK_INTENTS: ClerkIntent[] = [
   "ask-problem",
   "greeting",
   "hold",
+  "ivr-menu",
+  "gave-reference",
 ];
 
 export function isOffTask(caption: string, playbookId = "power-cut"): boolean {
@@ -149,7 +193,7 @@ export function isOffTask(caption: string, playbookId = "power-cut"): boolean {
   if (intent === "confused") return true;
 
   const c = normalizeCaption(caption);
-  const task = TASK_TERMS[playbookId] ?? TASK_TERMS["power-cut"];
+  const task = taskTermsFor(playbookId);
   if (task.test(c) || ON_TASK_PROCESS.test(c)) return false;
 
   const words = c.split(" ").filter(Boolean);
@@ -180,26 +224,66 @@ export function accessNeedPhrase(accessNeed: AccessNeed, callLanguage: CallLangu
 export function disclosureSuggestion(
   name: string,
   callLanguage: CallLanguage,
-  accessNeed: AccessNeed = "both"
+  accessNeed: AccessNeed = "both",
+  channel: PlaybookChannel = "phone-human"
 ): ReplySuggestion {
   const spokenName = name.trim();
   const give = giveFor(callLanguage);
   const need = accessNeedPhrase(accessNeed, callLanguage);
 
-  const sentence = spokenName
-    ? give(
-        `नमस्ते, मेरा नाम ${spokenName} है। ${need}, इसलिए मैं सहायक रिले के माध्यम से बात कर रहा हूँ।`,
-        `Hello, my name is ${spokenName}. ${need}, so I am speaking through an assistive relay.`
-      )
-    : give(
-        `नमस्ते। ${need}, इसलिए मैं सहायक रिले के माध्यम से बात कर रहा हूँ।`,
-        `Hello. ${need}, so I am speaking through an assistive relay.`
-      );
+  const inPerson = channel === "in-person";
+  const sentence = inPerson
+    ? spokenName
+      ? give(
+          `नमस्ते, मेरा नाम ${spokenName} है। ${need}। आपके सामने वाला व्यक्ति सहायक रिले से बात कर रहा है। कृपया सामान्य तरह बात कीजिए।`,
+          `Hello, my name is ${spokenName}. ${need}. The person in front of you is speaking through an assistive relay. Please continue as a normal conversation.`
+        )
+      : give(
+          `नमस्ते। ${need}। आपके सामने वाला व्यक्ति सहायक रिले से बात कर रहा है। कृपया सामान्य तरह बात कीजिए।`,
+          `Hello. ${need}. The person in front of you is speaking through an assistive relay. Please continue as a normal conversation.`
+        )
+    : spokenName
+      ? give(
+          `नमस्ते, मेरा नाम ${spokenName} है। ${need}, इसलिए मैं सहायक रिले के माध्यम से बात कर रहा हूँ।`,
+          `Hello, my name is ${spokenName}. ${need}, so I am speaking through an assistive relay.`
+        )
+      : give(
+          `नमस्ते। ${need}, इसलिए मैं सहायक रिले के माध्यम से बात कर रहा हूँ।`,
+          `Hello. ${need}, so I am speaking through an assistive relay.`
+        );
 
   return {
     id: "disclosure",
     label: t("call.suggest.introduce"),
     sentence,
+  };
+}
+
+export function emergencyOpenerSuggestion(
+  name: string,
+  callLanguage: CallLanguage,
+  accessNeed: AccessNeed,
+  facts: Record<string, string>
+): ReplySuggestion {
+  const disclosure = disclosureSuggestion(name, callLanguage, accessNeed);
+  const location = facts.location?.trim() ?? "";
+  const nature = facts.nature?.trim() ?? "";
+  const give = giveFor(callLanguage);
+  const extra = [
+    give(" यह आपातकाल है।", " This is an emergency."),
+    location
+      ? give(` मेरा स्थान ${location} है।`, ` My location is ${location}.`)
+      : "",
+    nature ? give(` ${nature}।`, ` ${nature}.`) : "",
+    give(
+      " कृपया तुरंत मदद भेजिए।",
+      " Please send help immediately."
+    ),
+  ].join("");
+  return {
+    id: "emergency-opener",
+    label: t("start.sos"),
+    sentence: `${disclosure.sentence}${extra}`,
   };
 }
 
@@ -224,21 +308,34 @@ function whyCallingSuggestion(
   playbookId: string
 ): ReplySuggestion {
   const give = giveFor(callLanguage);
-  const sentence =
-    playbookId === "bank"
-      ? give(
-          "मैं बैंक या साइबर धोखाधड़ी की शिकायत के लिए कॉल कर रहा हूँ।",
-          "I am calling about a bank or cyber fraud complaint."
-        )
-      : playbookId === "hospital"
-        ? give(
-            "मैं अस्पताल से बात करने के लिए कॉल कर रहा हूँ।",
-            "I am calling about a hospital appointment or enquiry."
-          )
-        : give(
-            "मैं बिजली कटौती की शिकायत करने और शिकायत संख्या लेने के लिए कॉल कर रहा हूँ।",
-            "I am calling to report a power cut and get a complaint number."
-          );
+  let sentence: string;
+  if (playbookId === "bank") {
+    sentence = give(
+      "मैं बैंक या साइबर धोखाधड़ी की शिकायत के लिए कॉल कर रहा हूँ।",
+      "I am calling about a bank or cyber fraud complaint."
+    );
+  } else if (playbookId === "hospital") {
+    sentence = give(
+      "मैं अस्पताल से बात करने के लिए कॉल कर रहा हूँ।",
+      "I am calling about a hospital appointment or enquiry."
+    );
+  } else if (playbookId === "power-cut") {
+    sentence = give(
+      "मैं बिजली कटौती की शिकायत करने और शिकायत संख्या लेने के लिए कॉल कर रहा हूँ।",
+      "I am calling to report a power cut and get a complaint number."
+    );
+  } else {
+    const playbook = getPlaybook(playbookId);
+    const goal = playbook
+      ? playbook.goal[callLanguage] ?? playbook.goal.en
+      : "";
+    sentence = goal
+      ? give(`मैं ${goal} के लिए बात कर रहा हूँ।`, `I am calling to ${goal}.`)
+      : give(
+          "मैं एक आधिकारिक काम के लिए बात कर रहा हूँ।",
+          "I am calling about an official matter."
+        );
+  }
   return {
     id: "s-why-calling",
     label: t("call.suggest.why_calling"),
@@ -258,6 +355,24 @@ function pleaseContinueSuggestion(callLanguage: CallLanguage): ReplySuggestion {
   };
 }
 
+/** Confirm a complaint number the clerk just said — never invent one. */
+export function confirmComplaintNumberSuggestion(
+  callLanguage: CallLanguage,
+  caption: string
+): ReplySuggestion | null {
+  const ref = detectReferenceNumbers(caption)[0];
+  if (!ref) return null;
+  const give = giveFor(callLanguage);
+  return {
+    id: "s-confirm-complaint",
+    label: t("call.suggest.confirm_complaint"),
+    sentence: give(
+      `धन्यवाद। मैंने शिकायत संख्या ${ref} नोट कर ली है।`,
+      `Thank you. I have noted complaint number ${ref}.`
+    ),
+  };
+}
+
 function stateIssueSuggestion(
   facts: Record<string, string>,
   callLanguage: CallLanguage,
@@ -265,26 +380,30 @@ function stateIssueSuggestion(
 ): ReplySuggestion {
   const give = giveFor(callLanguage);
   const since = facts.since_when?.trim() ?? "";
-  const sentence =
-    playbookId === "bank"
+  let sentence: string;
+  if (playbookId === "bank") {
+    sentence = give(
+      "मुझे धोखाधड़ी की रिपोर्ट करनी है या कार्ड ब्लॉक करना है।",
+      "I need to report fraud or block my card."
+    );
+  } else if (playbookId === "hospital") {
+    sentence = give(
+      "मुझे अपॉइंटमेंट या आपातकालीन जानकारी चाहिए।",
+      "I need an appointment or an emergency enquiry."
+    );
+  } else if (playbookId === "power-cut") {
+    sentence = since
       ? give(
-          "मुझे धोखाधड़ी की रिपोर्ट करनी है या कार्ड ब्लॉक करना है।",
-          "I need to report fraud or block my card."
+          `बिजली ${since} से गुल है। मुझे शिकायत दर्ज करनी है।`,
+          `The power has been out since ${since}. I need to file a complaint.`
         )
-      : playbookId === "hospital"
-        ? give(
-            "मुझे अपॉइंटमेंट या आपातकालीन जानकारी चाहिए।",
-            "I need an appointment or an emergency enquiry."
-          )
-        : since
-          ? give(
-              `बिजली ${since} से गुल है। मुझे शिकायत दर्ज करनी है।`,
-              `The power has been out since ${since}. I need to file a complaint.`
-            )
-          : give(
-              "बिजली गुल है। मुझे शिकायत दर्ज करनी है।",
-              "The power is out. I need to file a complaint."
-            );
+      : give(
+          "बिजली गुल है। मुझे शिकायत दर्ज करनी है।",
+          "The power is out. I need to file a complaint."
+        );
+  } else {
+    sentence = whyCallingSuggestion(callLanguage, playbookId).sentence;
+  }
   return {
     id: "s-state-issue",
     label: t("call.suggest.state_issue"),
@@ -309,21 +428,32 @@ export function returnToPurposeSuggestion(
   playbookId: string
 ): ReplySuggestion {
   const give = giveFor(callLanguage);
-  const sentence =
-    playbookId === "bank"
-      ? give(
-          "कृपया धोखाधड़ी या कार्ड ब्लॉक की शिकायत पर वापस आइए। उसी में मुझे मदद चाहिए।",
-          "Please go back to the fraud or card-block complaint. That is the issue I need help with."
-        )
-      : playbookId === "hospital"
-        ? give(
-            "कृपया अस्पताल अपॉइंटमेंट पर वापस आइए। उसी के लिए मैंने कॉल किया है।",
-            "Please go back to the hospital appointment. That is why I called."
-          )
-        : give(
-            "कृपया बिजली कटौती की शिकायत पर वापस आइए और शिकायत संख्या दीजिए।",
-            "Please go back to the power-cut complaint and help me get a complaint number."
-          );
+  let sentence: string;
+  if (playbookId === "bank") {
+    sentence = give(
+      "कृपया धोखाधड़ी या कार्ड ब्लॉक की शिकायत पर वापस आइए। उसी में मुझे मदद चाहिए।",
+      "Please go back to the fraud or card-block complaint. That is the issue I need help with."
+    );
+  } else if (playbookId === "hospital") {
+    sentence = give(
+      "कृपया अस्पताल अपॉइंटमेंट पर वापस आइए। उसी के लिए मैंने कॉल किया है।",
+      "Please go back to the hospital appointment. That is why I called."
+    );
+  } else if (playbookId === "power-cut") {
+    sentence = give(
+      "कृपया बिजली कटौती की शिकायत पर वापस आइए और शिकायत संख्या दीजिए।",
+      "Please go back to the power-cut complaint and help me get a complaint number."
+    );
+  } else {
+    const playbook = getPlaybook(playbookId);
+    const goal = playbook
+      ? playbook.goal[callLanguage] ?? playbook.goal.en
+      : "the reason I called";
+    sentence = give(
+      `कृपया मुख्य विषय पर वापस आइए: ${goal}`,
+      `Please go back to the issue: ${goal}`
+    );
+  }
   return {
     id: "s-return-purpose",
     label: t("call.suggest.return_to_purpose"),
@@ -352,11 +482,39 @@ export function ensurePurposeSteer(
   return [steer, ...rest].slice(0, 5);
 }
 
+function genericFactSuggestions(
+  facts: Record<string, string>,
+  callLanguage: CallLanguage,
+  playbookId: string
+): ReplySuggestion[] {
+  const playbook = getPlaybook(playbookId);
+  if (!playbook) return [];
+  const give = giveFor(callLanguage);
+  return playbook.facts.map((fact) => {
+    const value = (facts[fact.key] ?? "").trim();
+    const label = fact.label.en ?? fact.key.replace(/_/g, " ");
+    return {
+      id: `s-${fact.key}`,
+      label: `Give ${label.toLowerCase()}`.slice(0, 40),
+      sentence: value
+        ? give(`${label} ${value} है।`, `My ${label.toLowerCase()} is ${value}.`)
+        : missingFactSentence(callLanguage),
+    };
+  });
+}
+
 function playbookFactSuggestions(
   facts: Record<string, string>,
   callLanguage: CallLanguage,
   playbookId: string
 ): ReplySuggestion[] {
+  if (
+    playbookId !== "bank" &&
+    playbookId !== "hospital" &&
+    playbookId !== "power-cut"
+  ) {
+    return genericFactSuggestions(facts, callLanguage, playbookId);
+  }
   const give = giveFor(callLanguage);
 
   if (playbookId === "bank") {
@@ -462,12 +620,54 @@ function idSuggestions(
   callLanguage: CallLanguage,
   playbookId: string
 ): ReplySuggestion[] {
-  return playbookFactSuggestions(facts, callLanguage, playbookId).filter(
+  const items = playbookFactSuggestions(facts, callLanguage, playbookId);
+  const known = items.filter(
     (item) =>
       item.id === "s-consumer" ||
       item.id === "s-account" ||
-      item.id === "s-patient"
+      item.id === "s-patient" ||
+      item.id.endsWith("_number") ||
+      item.id.includes("card") ||
+      item.id.includes("account") ||
+      item.id.includes("patient") ||
+      item.id.includes("ppo") ||
+      item.id.includes("fir") ||
+      item.id.includes("eid") ||
+      item.id.includes("ration")
   );
+  return known.length > 0 ? known : items.slice(0, 2);
+}
+
+export function parseIvrMenuSuggestions(caption: string): ReplySuggestion[] {
+  const seen = new Set<string>();
+  const items: ReplySuggestion[] = [];
+  const add = (digit: string, label: string) => {
+    if (!digit || seen.has(digit)) return;
+    seen.add(digit);
+    const clean = label.replace(/\s+/g, " ").trim().slice(0, 32) || `Option ${digit}`;
+    items.push({
+      id: `dtmf-${digit}`,
+      label: `Press ${digit} — ${clean}`,
+      sentence: digit,
+      action: "dtmf",
+      digit,
+    });
+  };
+
+  const pressFirst =
+    /(?:press|option|दबाएँ|दबायें|दबाए)\s*([0-9*#])(?:\s*(?:for|के लिए)?\s*([^,.।;]+))?/gi;
+  for (const match of caption.matchAll(pressFirst)) {
+    add(match[1], match[2] ?? "");
+  }
+  const forThenPress = /for\s+([^,.]+?)\s+press\s+([0-9*#])/gi;
+  for (const match of caption.matchAll(forThenPress)) {
+    add(match[2], match[1]);
+  }
+  if (items.length === 0) {
+    add("0", "Operator");
+    add("1", "First option");
+  }
+  return items.slice(0, 5);
 }
 
 function placeSuggestions(
@@ -502,13 +702,14 @@ export function contextualSuggestions(
   name = "",
   accessNeed: AccessNeed = "both"
 ): ReplySuggestion[] {
+  const channel = getPlaybook(playbookId)?.channel ?? "phone-human";
   const intent = caption.trim()
     ? detectClerkIntent(caption)
     : ("unknown" as ClerkIntent);
 
   if (!caption.trim()) {
     return [
-      disclosureSuggestion(name, callLanguage, accessNeed),
+      disclosureSuggestion(name, callLanguage, accessNeed, channel),
       ...playbookFactSuggestions(facts, callLanguage, playbookId),
     ];
   }
@@ -523,14 +724,22 @@ export function contextualSuggestions(
     case "ask-name":
     case "greeting":
       return [
-        disclosureSuggestion(name, callLanguage, accessNeed),
+        disclosureSuggestion(name, callLanguage, accessNeed, channel),
         whyCallingSuggestion(callLanguage, playbookId),
       ];
+    case "ivr-menu":
+      return parseIvrMenuSuggestions(caption);
     case "hold":
       return [
         pleaseContinueSuggestion(callLanguage),
         whyCallingSuggestion(callLanguage, playbookId),
       ];
+    case "gave-reference": {
+      const confirm = confirmComplaintNumberSuggestion(callLanguage, caption);
+      return confirm
+        ? [confirm, pleaseContinueSuggestion(callLanguage)]
+        : [pleaseContinueSuggestion(callLanguage)];
+    }
     case "ask-id":
       return idSuggestions(facts, callLanguage, playbookId);
     case "ask-place":
@@ -569,11 +778,24 @@ export function looksLikeUnsolicitedFactDump(item: ReplySuggestion): boolean {
 
 export function keepCaptionRelevant(
   caption: string,
-  suggestions: ReplySuggestion[]
+  suggestions: ReplySuggestion[],
+  transcript: TranscriptEntry[] = []
 ): ReplySuggestion[] {
+  const clerkRefs = new Set([
+    ...detectReferenceNumbers(caption),
+    ...clerkSpokenReferenceNumbers(transcript),
+  ]);
   const intent = detectClerkIntent(caption);
-  if (ASKED_FOR_FACTS.includes(intent)) return suggestions;
-  return suggestions.filter((item) => !looksLikeUnsolicitedFactDump(item));
+  if (ASKED_FOR_FACTS.includes(intent) || intent === "gave-reference") {
+    return suggestions;
+  }
+  return suggestions.filter((item) => {
+    if (!looksLikeUnsolicitedFactDump(item)) return true;
+    // Confirming a clerk-spoken complaint number is not a fact dump.
+    return detectReferenceNumbers(`${item.label} ${item.sentence}`).some((ref) =>
+      clerkRefs.has(ref)
+    );
+  });
 }
 
 export function finalizeReplySuggestions({
@@ -584,6 +806,7 @@ export function finalizeReplySuggestions({
   name,
   accessNeed,
   llm = [],
+  transcript = [],
 }: {
   facts: Record<string, string>;
   callLanguage: CallLanguage;
@@ -592,6 +815,7 @@ export function finalizeReplySuggestions({
   name: string;
   accessNeed?: AccessNeed;
   llm?: ReplySuggestion[];
+  transcript?: TranscriptEntry[];
 }): ReplySuggestion[] {
   const fallback = contextualSuggestions(
     facts,
@@ -603,7 +827,7 @@ export function finalizeReplySuggestions({
   );
   if (!caption.trim()) return fallback;
 
-  const relevant = keepCaptionRelevant(caption, llm);
+  const relevant = keepCaptionRelevant(caption, llm, transcript);
   const merged: ReplySuggestion[] = [];
   const seen = new Set<string>();
   const add = (item: ReplySuggestion) => {
@@ -615,7 +839,12 @@ export function finalizeReplySuggestions({
     merged.push({ ...item, sentence });
   };
   for (const item of relevant) add(item);
-  if (merged.length < 3) {
+  const intent = detectClerkIntent(caption);
+  const llmEmpty = relevant.length === 0;
+  const needIvrDigits = intent === "ivr-menu";
+  const needFactPad =
+    relevant.length < 3 && ASKED_FOR_FACTS.includes(intent);
+  if (llmEmpty || needIvrDigits || needFactPad) {
     for (const item of fallback) add(item);
   }
   return ensurePurposeSteer(caption, playbookId, callLanguage, merged);

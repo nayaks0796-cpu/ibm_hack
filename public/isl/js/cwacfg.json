@@ -47,7 +47,7 @@
       "rateSpeed": 5,
       "allowFrameSteps": false,
       "initSiGMLURL": "",
-      "allowSiGMLText": false
+      "allowSiGMLText": true
     }
   ]
 }

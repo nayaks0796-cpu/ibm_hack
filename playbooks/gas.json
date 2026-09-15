@@ -1,0 +1,40 @@
+{
+  "id": "gas",
+  "icon": "flame",
+  "category": "utility",
+  "channel": "phone-ivr",
+  "outcomeKind": "reference",
+  "title": {
+    "en": "Gas / LPG",
+    "hi": "गैस / एलपीजी",
+    "ta": "எரிவாயு",
+    "te": "గ్యాస్",
+    "kn": "ಗ್ಯಾಸ್",
+    "ml": "ഗ്യാസ്",
+    "mr": "गॅस",
+    "bn": "গ্যাস"
+  },
+  "goal": {
+    "en": "Book a refill or register a gas complaint and get a number",
+    "hi": "गैस रिफिल या शिकायत दर्ज कर संख्या प्राप्त करें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["LPG", "gas", "cylinder", "distributor", "IVRS", "गैस", "सिलेंडर", "शिकायत"],
+  "stages": [
+    { "id": "ivr", "en": "Use the IVR: often 1 for refill, 2 for complaint.", "hi": "IVR चलाएँ: अक्सर 1 रिफिल, 2 शिकायत।" },
+    { "id": "id", "en": "Give consumer or distributor number when asked.", "hi": "पूछे जाने पर उपभोक्ता या वितरक संख्या दें।" },
+    { "id": "number", "en": "Ask for the booking or complaint number.", "hi": "बुकिंग या शिकायत संख्या माँगें।" }
+  ],
+  "facts": [
+    {
+      "key": "consumer_number",
+      "label": { "en": "LPG consumer number", "hi": "एलपीजी उपभोक्ता क्रमांक" },
+      "required": true
+    },
+    {
+      "key": "distributor",
+      "label": { "en": "Distributor / area", "hi": "वितरक / क्षेत्र" },
+      "required": false
+    }
+  ]
+}

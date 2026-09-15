@@ -43,6 +43,14 @@ export async function GET(
   return proxy(req, path);
 }
 
+export async function HEAD(
+  req: NextRequest,
+  context: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await context.params;
+  return proxy(req, path);
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ path: string[] }> }

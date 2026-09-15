@@ -1,0 +1,173 @@
+{
+  "id": "emergency-112",
+  "icon": "siren",
+  "category": "emergency",
+  "channel": "phone-human",
+  "outcomeKind": "acknowledged",
+  "emergency": true,
+  "title": {
+    "en": "Emergency 112",
+    "hi": "आपात 112",
+    "ta": "அவசர 112",
+    "te": "అత్యవసరం 112",
+    "kn": "ತುರ್ತು 112",
+    "ml": "അടിയന്തരം 112",
+    "mr": "आणीबाणी 112",
+    "bn": "জরুরি 112"
+  },
+  "goal": {
+    "en": "Get 112 to send police, fire, ambulance, or disaster help",
+    "hi": "112 से पुलिस, अग्निशमन, एम्बुलेंस या आपदा मदद भेजवाएँ",
+    "ta": "112 மூலம் காவல், தீயணைப்பு, ஆம்புலன்ஸ் அல்லது பேரிடர் உதவி அனுப்பச் செய்யுங்கள்",
+    "te": "112 ద్వారా పోలీసు, అగ్నిమాపక, అంబులెన్స్ లేదా విపత్తు సహాయం పంపించండి",
+    "kn": "112 ಮೂಲಕ ಪೊಲೀಸ್, ಅಗ್ನಿಶಾಮಕ, ಆಂಬ್ಯುಲೆನ್ಸ್ ಅಥವಾ ವಿಪತ್ತು ಸಹಾಯ ಕಳುಹಿಸಿ",
+    "ml": "112 വഴി പോലീസ്, അഗ്നിശമന, ആംബുലൻസ് അല്ലെങ്കിൽ ദുരന്ത സഹായം അയയ്ക്കുക",
+    "mr": "112 कडून पोलिस, अग्निशमन, रुग्णवाहिका किंवा आपत्ती मदत पाठवा",
+    "bn": "112 দিয়ে পুলিশ, ফায়ার, অ্যাম্বুলেন্স বা দুর্যোগ সাহায্য পাঠান"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": [
+    "emergency",
+    "112",
+    "ERSS",
+    "police",
+    "fire",
+    "ambulance",
+    "disaster",
+    "dispatch",
+    "100",
+    "101",
+    "108",
+    "पुलिस",
+    "आग",
+    "एम्बुलेंस",
+    "आपदा",
+    "आपातकाल"
+  ],
+  "stages": [
+    { "id": "now", "en": "Say this is an emergency and ask 112 to send help to the location.", "hi": "कहें कि यह आपातकाल है और 112 से स्थान पर मदद भेजने को कहें।" },
+    { "id": "which", "en": "Say which help is needed: police, fire, ambulance, or disaster.", "hi": "कौन सी मदद चाहिए बताएँ: पुलिस, अग्निशमन, एम्बुलेंस, या आपदा।" },
+    { "id": "what", "en": "In one line, say what is happening.", "hi": "एक पंक्ति में क्या हो रहा है बताएँ।" },
+    { "id": "hurt", "en": "Say if anyone is hurt.", "hi": "कोई घायल है या नहीं, बताएँ।" },
+    { "id": "stay", "en": "Confirm they are coming. Stay on the line if they ask.", "hi": "वे आ रहे हैं, पुष्टि करें। कहें तो लाइन पर रहें।" }
+  ],
+  "quickPhrases": [
+    {
+      "id": "send-help",
+      "label": {
+        "en": "Send help now",
+        "hi": "अभी मदद भेजें",
+        "ta": "இப்போதே உதவி அனுப்புங்கள்",
+        "te": "ఇప్పుడే సహాయం పంపండి",
+        "kn": "ಈಗಲೇ ಸಹಾಯ ಕಳುಹಿಸಿ",
+        "ml": "ഇപ്പോൾ സഹായം അയയ്ക്കുക",
+        "mr": "आता मदत पाठवा",
+        "bn": "এখনই সাহায্য পাঠান"
+      },
+      "sentence": {
+        "en": "This is an emergency. Please send help to my location immediately.",
+        "hi": "यह आपातकाल है। कृपया तुरंत मेरे स्थान पर मदद भेजिए।"
+      }
+    },
+    {
+      "id": "send-police",
+      "label": {
+        "en": "Need police",
+        "hi": "पुलिस चाहिए",
+        "ta": "காவல் தேவை",
+        "te": "పోలీసు కావాలి",
+        "kn": "ಪೊಲೀಸ್ ಬೇಕು",
+        "ml": "പോലീസ് വേണം",
+        "mr": "पोलिस हवेत",
+        "bn": "পুলিশ লাগবে"
+      },
+      "sentence": {
+        "en": "Please send police to my location immediately.",
+        "hi": "कृपया तुरंत मेरे स्थान पर पुलिस भेजिए।"
+      }
+    },
+    {
+      "id": "send-ambulance",
+      "label": {
+        "en": "Need ambulance",
+        "hi": "एम्बुलेंस चाहिए",
+        "ta": "ஆம்புலன்ஸ் தேவை",
+        "te": "అంబులెన్స్ కావాలి",
+        "kn": "ಆಂಬ್ಯುಲೆನ್ಸ್ ಬೇಕು",
+        "ml": "ആംബുലൻസ് വേണം",
+        "mr": "रुग्णवाहिका हवी",
+        "bn": "অ্যাম্বুলেন্স লাগবে"
+      },
+      "sentence": {
+        "en": "Please send an ambulance to my location immediately.",
+        "hi": "कृपया तुरंत मेरे स्थान पर एम्बुलेंस भेजिए।"
+      }
+    },
+    {
+      "id": "send-fire",
+      "label": {
+        "en": "There is a fire",
+        "hi": "आग लगी है",
+        "ta": "தீ விபத்து",
+        "te": "అగ్ని ప్రమాదం",
+        "kn": "ಬೆಂಕಿ ಆಗಿದೆ",
+        "ml": "തീപിടിത്തമുണ്ട്",
+        "mr": "आग लागली आहे",
+        "bn": "আগুন লেগেছে"
+      },
+      "sentence": {
+        "en": "There is a fire. Please send the fire service to my location immediately.",
+        "hi": "आग लगी है। कृपया तुरंत मेरे स्थान पर अग्निशमन भेजिए।"
+      }
+    },
+    {
+      "id": "send-disaster",
+      "label": {
+        "en": "Disaster / accident",
+        "hi": "आपदा / दुर्घटना",
+        "ta": "பேரிடர் / விபத்து",
+        "te": "విపత్తు / ప్రమాదం",
+        "kn": "ವಿಪತ್ತು / ಅಪಘಾತ",
+        "ml": "ദുരന്തം / അപകടം",
+        "mr": "आपत्ती / अपघात",
+        "bn": "দুর্যোগ / দুর্ঘটনা"
+      },
+      "sentence": {
+        "en": "There is an accident or disaster. Please send emergency help to my location immediately.",
+        "hi": "दुर्घटना या आपदा हुई है। कृपया तुरंत मेरे स्थान पर आपात मदद भेजिए।"
+      }
+    },
+    {
+      "id": "stay",
+      "label": {
+        "en": "I cannot speak more",
+        "hi": "और नहीं बोल सकता",
+        "ta": "மேலும் பேச முடியாது",
+        "te": "ఇంకా మాట్లాడలేను",
+        "kn": "ಇನ್ನು ಮಾತನಾಡಲಾರೆ",
+        "ml": "കൂടുതൽ സംസാരിക്കാൻ കഴിയില്ല",
+        "mr": "आणखी बोलू शकत नाही",
+        "bn": "আর বলতে পারছি না"
+      },
+      "sentence": {
+        "en": "I cannot speak more. Please stay on the line. I can read captions.",
+        "hi": "मैं और नहीं बोल सकता। कृपया लाइन पर रहिए। मैं कैप्शन पढ़ सकता हूँ।"
+      }
+    }
+  ],
+  "facts": [
+    {
+      "key": "location",
+      "label": { "en": "Location / landmark", "hi": "स्थान / लैंडमार्क" },
+      "required": true
+    },
+    {
+      "key": "nature",
+      "label": {
+        "en": "What is happening (police, fire, ambulance, disaster)",
+        "hi": "क्या हो रहा है (पुलिस, आग, एम्बुलेंस, आपदा)"
+      },
+      "required": false
+    }
+  ]
+}

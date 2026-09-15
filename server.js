@@ -1,13 +1,14 @@
 // server.js — Custom Next.js server
-// WebSocket /api/stt-fallback proxies PCM16 audio to IBM Watson Speech-to-Text.
+// WebSocket /api/room-relay for the two-browser demo call.
 // Start with: npm run dev:ws
+// Captions are ElevenLabs Scribe only (`npm run dev` is enough for that).
 
 const fs = require("fs");
 const path = require("path");
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
-const { WebSocketServer, WebSocket } = require("ws");
+const { WebSocketServer } = require("ws");
 
 function loadLocalEnv() {
   const file = path.join(__dirname, ".env.local");
@@ -39,104 +40,10 @@ const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-function watsonRecognizeUrl(raw, model) {
-  let url = String(raw || "").trim().replace(/\/$/, "");
-  if (!url) return "";
-  url = url.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:");
-  if (!url.includes("/v1/recognize")) {
-    url = `${url}/v1/recognize`;
-  }
-  const parsed = new URL(url);
-  parsed.searchParams.set("model", model);
-  return parsed.toString();
-}
-
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
     handle(req, res, parsedUrl);
-  });
-
-  const wss = new WebSocketServer({ noServer: true });
-
-  wss.on("connection", (clientWs, req) => {
-    const parsedUrl = parse(req.url, true);
-    const model =
-      parsedUrl.query.model === "en-IN_Telephony"
-        ? "en-IN_Telephony"
-        : "hi-IN_Telephony";
-
-    const watsonKey = process.env.WATSON_STT_API_KEY;
-    const watsonBase = process.env.WATSON_STT_URL;
-    if (!watsonKey || !watsonBase) {
-      clientWs.close(1011, "Watson STT is not configured");
-      return;
-    }
-
-    const watsonUrl = watsonRecognizeUrl(watsonBase, model);
-    const auth = Buffer.from(`apikey:${watsonKey}`).toString("base64");
-    const pending = [];
-    let watsonReady = false;
-
-    const watsonWs = new WebSocket(watsonUrl, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
-
-    function sendToWatson(data) {
-      if (watsonWs.readyState !== WebSocket.OPEN) return;
-      watsonWs.send(data);
-    }
-
-    watsonWs.on("open", () => {
-      sendToWatson(
-        JSON.stringify({
-          action: "start",
-          "content-type": "audio/l16;rate=16000",
-          interim_results: true,
-          smart_formatting: true,
-        })
-      );
-      watsonReady = true;
-      for (const frame of pending) sendToWatson(frame);
-      pending.length = 0;
-    });
-
-    watsonWs.on("message", (data) => {
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(data.toString());
-      }
-    });
-
-    watsonWs.on("error", (err) => {
-      console.error("[Watson STT]", err.message);
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({ error: err.message }));
-        clientWs.close(1011, "Watson STT error");
-      }
-    });
-
-    watsonWs.on("close", () => {
-      if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
-    });
-
-    clientWs.on("message", (data) => {
-      if (watsonReady) {
-        sendToWatson(data);
-        return;
-      }
-      if (pending.length < 40) pending.push(data);
-    });
-
-    clientWs.on("close", () => {
-      if (watsonWs.readyState === WebSocket.OPEN) {
-        try {
-          sendToWatson(JSON.stringify({ action: "stop" }));
-        } catch {
-          // Closing anyway.
-        }
-        watsonWs.close();
-      }
-    });
   });
 
   const roomWss = new WebSocketServer({ noServer: true });
@@ -155,14 +62,33 @@ app.prepare().then(() => {
     ws.roomId = roomId;
     ws.role = role;
 
+    const peerRoles = [];
+    for (const client of clients) {
+      if (client !== ws && client.role) peerRoles.push(client.role);
+    }
+
     try {
-      ws.send(JSON.stringify({ type: "room-joined", roomId, role, clientCount: clients.size }));
+      ws.send(
+        JSON.stringify({
+          type: "room-joined",
+          roomId,
+          role,
+          clientCount: clients.size,
+          peerRoles,
+        })
+      );
     } catch {}
 
     for (const client of clients) {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
         try {
-          client.send(JSON.stringify({ type: "peer-joined", role, clientCount: clients.size }));
+          client.send(
+            JSON.stringify({
+              type: "peer-joined",
+              role,
+              clientCount: clients.size,
+            })
+          );
         } catch {}
       }
     }
@@ -196,11 +122,7 @@ app.prepare().then(() => {
 
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url);
-    if (pathname === "/api/stt-fallback") {
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit("connection", ws, req);
-      });
-    } else if (pathname === "/api/room-relay") {
+    if (pathname === "/api/room-relay") {
       roomWss.handleUpgrade(req, socket, head, (ws) => {
         roomWss.emit("connection", ws, req);
       });
@@ -209,7 +131,8 @@ app.prepare().then(() => {
   });
 
   const port = process.env.PORT || 3000;
-  server.listen(port, () => {
-    console.log(`> Sampark ready on http://localhost:${port}`);
+  const host = process.env.HOST || "0.0.0.0";
+  server.listen(port, host, () => {
+    console.log(`> Sampark ready on http://${host}:${port}`);
   });
 });

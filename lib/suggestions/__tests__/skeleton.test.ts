@@ -5,6 +5,7 @@ import {
   finalizeReplySuggestions,
   isOffTask,
   keepCaptionRelevant,
+  parseIvrMenuSuggestions,
 } from "../skeleton";
 
 beforeAll(() => {
@@ -29,6 +30,27 @@ describe("detectClerkIntent", () => {
 
   test("detects hold / transfer as call progress", () => {
     expect(detectClerkIntent("Please hold the line")).toBe("hold");
+  });
+
+  test("detects an IVR menu", () => {
+    expect(detectClerkIntent("Press 1 for English, press 2 for Hindi")).toBe(
+      "ivr-menu"
+    );
+  });
+
+  test("treats a clerk-issued complaint number as gave-reference", () => {
+    expect(
+      detectClerkIntent("Your complaint has been registered. Number is COMP-4821.")
+    ).toBe("gave-reference");
+    expect(
+      detectClerkIntent("आपकी शिकायत संख्या COMP-4821 है।")
+    ).toBe("gave-reference");
+  });
+
+  test("does not treat asking for a complaint number as giving one", () => {
+    expect(detectClerkIntent("Please give me your consumer number.")).toBe(
+      "ask-id"
+    );
   });
 });
 
@@ -58,7 +80,7 @@ describe("contextualSuggestions", () => {
       "en",
       "power-cut",
       "What are you doing?",
-      "Tanish M."
+      "Tanish M"
     );
     expect(items.map((item) => item.id)).toEqual([
       "s-return-purpose",
@@ -92,12 +114,24 @@ describe("contextualSuggestions", () => {
   });
 
   test("opening state still offers introduce plus playbook facts", () => {
-    const items = contextualSuggestions(facts, "en", "power-cut", "", "Tanish");
+    const items = contextualSuggestions(facts, "en", "power-cut", "", "Tanish M");
     expect(items.map((item) => item.id)).toEqual([
       "disclosure",
       "s-consumer",
       "s-area",
     ]);
+  });
+
+  test("offers to confirm a complaint number the clerk just gave", () => {
+    const items = contextualSuggestions(
+      facts,
+      "en",
+      "power-cut",
+      "Your complaint number is COMP-4821."
+    );
+    expect(items[0].id).toBe("s-confirm-complaint");
+    expect(items[0].sentence).toContain("COMP-4821");
+    expect(items[0].sentence).not.toMatch(/COMP-9999/);
   });
 });
 
@@ -124,6 +158,30 @@ describe("keepCaptionRelevant", () => {
       )
     ).toEqual(["s1"]);
   });
+
+  test("keeps an LLM confirmation of a clerk-given complaint number", () => {
+    const confirm = {
+      id: "s1",
+      label: "Confirm the complaint number",
+      sentence: "Thank you. I have noted complaint number COMP-4821.",
+    };
+    expect(
+      keepCaptionRelevant("Your complaint number is COMP-4821.", [confirm]).map(
+        (item) => item.id
+      )
+    ).toEqual(["s1"]);
+  });
+
+  test("drops an invented complaint number when the clerk never said one", () => {
+    const invented = {
+      id: "s1",
+      label: "Confirm the complaint number",
+      sentence: "Thank you. I have noted complaint number COMP-4821.",
+    };
+    expect(
+      keepCaptionRelevant("Please hold on.", [invented]).map((item) => item.id)
+    ).toEqual([]);
+  });
 });
 
 describe("finalizeReplySuggestions", () => {
@@ -133,7 +191,7 @@ describe("finalizeReplySuggestions", () => {
       callLanguage: "en",
       playbookId: "power-cut",
       caption: "The cricket score was amazing last night",
-      name: "Tanish",
+      name: "Tanish M",
       llm: [
         {
           id: "s1",
@@ -146,13 +204,45 @@ describe("finalizeReplySuggestions", () => {
     expect(items.some((item) => item.id === "s1")).toBe(true);
   });
 
+  test("does not pad live LLM replies with playbook fact dumps", () => {
+    const items = finalizeReplySuggestions({
+      facts,
+      callLanguage: "en",
+      playbookId: "power-cut",
+      caption: "Can you hear me? Is this a recording?",
+      name: "Tanish M",
+      llm: [
+        {
+          id: "s1",
+          label: "Yes I hear you",
+          sentence: "Yes, I can hear you.",
+        },
+        {
+          id: "s2",
+          label: "Explain the relay",
+          sentence: "I am speaking through an assistive relay.",
+        },
+        {
+          id: "s3",
+          label: "Get back to the issue",
+          sentence: "Please help with the power-cut complaint.",
+        },
+      ],
+    });
+    expect(items.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["s1", "s2"])
+    );
+    expect(items.map((item) => item.id)).not.toContain("s-consumer");
+    expect(items.map((item) => item.id)).not.toContain("s-area");
+  });
+
   test("does not inject return-to-purpose when the clerk asks for a fact", () => {
     const items = finalizeReplySuggestions({
       facts,
       callLanguage: "en",
       playbookId: "power-cut",
       caption: "What is your consumer number?",
-      name: "Tanish",
+      name: "Tanish M",
       llm: [
         {
           id: "s1",
@@ -163,5 +253,17 @@ describe("finalizeReplySuggestions", () => {
     });
     expect(items.map((item) => item.id)).not.toContain("s-return-purpose");
     expect(items[0].sentence).toContain("1234567890");
+  });
+});
+
+describe("parseIvrMenuSuggestions", () => {
+  test("turns press-N lines into DTMF suggestions", () => {
+    const items = parseIvrMenuSuggestions(
+      "Press 1 for English. Press 2 for Hindi. Press 0 for operator."
+    );
+    expect(items[0].action).toBe("dtmf");
+    expect(items.map((item) => item.digit)).toEqual(
+      expect.arrayContaining(["1", "2", "0"])
+    );
   });
 });

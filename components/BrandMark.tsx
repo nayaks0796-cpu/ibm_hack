@@ -4,11 +4,13 @@ export function BridgeIcon({ className = "size-8" }: { className?: string }) {
   return (
     <svg
       viewBox="6 16 108 76"
+      width="32"
+      height="32"
       fill="currentColor"
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`text-highlight-ink ${className}`}
+      className={`h-8 w-8 shrink-0 text-highlight-ink ${className}`}
       aria-hidden="true"
     >
       <line x1="16" y1="84" x2="104" y2="84" strokeWidth="7" />

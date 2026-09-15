@@ -1,0 +1,54 @@
+{
+  "id": "fire-101",
+  "icon": "flame",
+  "category": "emergency",
+  "channel": "phone-human",
+  "outcomeKind": "acknowledged",
+  "emergency": true,
+  "title": {
+    "en": "Fire 101",
+    "hi": "अग्निशमन 101",
+    "ta": "தீயணைப்பு 101",
+    "te": "అగ్నిమాపక 101",
+    "kn": "ಅಗ್ನಿಶಾಮಕ 101",
+    "ml": "അഗ്നിശമന 101",
+    "mr": "अग्निशमन 101",
+    "bn": "ফায়ার 101"
+  },
+  "goal": {
+    "en": "Send the fire service to my location now",
+    "hi": "अभी मेरे स्थान पर अग्निशमन भेजें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["fire", "101", "smoke", "building", "आग", "धुआँ"],
+  "stages": [
+    { "id": "now", "en": "Say there is a fire and send the fire service.", "hi": "कहें कि आग लगी है और अग्निशमन भेजें।" },
+    { "id": "where", "en": "Give location and if people are inside.", "hi": "स्थान बताएँ और लोग अंदर हैं या नहीं।" },
+    { "id": "stay", "en": "Confirm they are coming.", "hi": "वे आ रहे हैं, पुष्टि करें।" }
+  ],
+  "quickPhrases": [
+    {
+      "id": "send-fire",
+      "label": { "en": "There is a fire", "hi": "आग लगी है" },
+      "sentence": {
+        "en": "There is a fire. Please send the fire service to my location immediately.",
+        "hi": "आग लगी है। कृपया तुरंत मेरे स्थान पर अग्निशमन भेजिए।"
+      }
+    },
+    {
+      "id": "people-inside",
+      "label": { "en": "People are inside", "hi": "लोग अंदर हैं" },
+      "sentence": {
+        "en": "People are still inside the building. Please send the fire service now.",
+        "hi": "लोग अभी भी इमारत के अंदर हैं। कृपया अभी अग्निशमन भेजिए।"
+      }
+    }
+  ],
+  "facts": [
+    {
+      "key": "location",
+      "label": { "en": "Location / landmark", "hi": "स्थान / लैंडमार्क" },
+      "required": true
+    }
+  ]
+}

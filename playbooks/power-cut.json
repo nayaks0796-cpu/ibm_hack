@@ -22,6 +22,29 @@
     "bn": "বিদ্যুৎ কাটার অভিযোগ নম্বর নিন"
   },
   "defaultCallLanguage": "en",
+  "category": "utility",
+  "channel": "phone-human",
+  "outcomeKind": "reference",
+  "keyterms": [
+    "power",
+    "electricity",
+    "outage",
+    "consumer number",
+    "meter",
+    "complaint",
+    "reference",
+    "बिजली",
+    "गुल",
+    "शिकायत",
+    "उपभोक्ता"
+  ],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say there is a power cut.", "hi": "परिचय दें और कहें कि बिजली गुल है।" },
+    { "id": "id", "en": "Give consumer number and area when asked.", "hi": "पूछे जाने पर उपभोक्ता क्रमांक और क्षेत्र दें।" },
+    { "id": "when", "en": "Say since when the power has been out.", "hi": "कब से बिजली गुल है, बताएँ।" },
+    { "id": "number", "en": "Ask for the complaint or reference number.", "hi": "शिकायत या संदर्भ संख्या माँगें।" },
+    { "id": "end", "en": "Confirm the number and end the call.", "hi": "संख्या की पुष्टि करें और कॉल समाप्त करें।" }
+  ],
   "facts": [
     {
       "key": "consumer_number",

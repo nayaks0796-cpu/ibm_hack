@@ -1,0 +1,40 @@
+{
+  "id": "aadhaar",
+  "icon": "id-card",
+  "category": "government",
+  "channel": "in-person",
+  "outcomeKind": "reference",
+  "title": {
+    "en": "Aadhaar",
+    "hi": "आधार",
+    "ta": "ஆதார்",
+    "te": "ఆధార్",
+    "kn": "ಆಧಾರ್",
+    "ml": "ആധാർ",
+    "mr": "आधार",
+    "bn": "আধার"
+  },
+  "goal": {
+    "en": "Update or enquire about Aadhaar and get an acknowledgement",
+    "hi": "आधार अपडेट या पूछताछ कर पावती लें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["Aadhaar", "UIDAI", "enrolment", "update", "EID", "आधार", "नामांकन"],
+  "stages": [
+    { "id": "intro", "en": "Place the phone facing the desk and introduce.", "hi": "फोन डेस्क की ओर रखें और परिचय दें।" },
+    { "id": "need", "en": "Say update, enrolment, or status — never speak the 12-digit Aadhaar number.", "hi": "अपडेट, नामांकन या स्थिति बताएँ — 12 अंकों का आधार नंबर कभी न बोलें।" },
+    { "id": "number", "en": "Ask for the acknowledgement or EID slip number.", "hi": "पावती या ईआईडी स्लिप नंबर माँगें।" }
+  ],
+  "facts": [
+    {
+      "key": "enrolment_or_eid",
+      "label": { "en": "Enrolment / EID number (not Aadhaar)", "hi": "नामांकन / ईआईडी नंबर (आधार नहीं)" },
+      "required": false
+    },
+    {
+      "key": "update_type",
+      "label": { "en": "What to update", "hi": "क्या अपडेट करना है" },
+      "required": false
+    }
+  ]
+}

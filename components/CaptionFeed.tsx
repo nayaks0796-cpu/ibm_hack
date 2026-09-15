@@ -8,10 +8,18 @@ export default function CaptionFeed({
   entries,
   liveText,
   liveSide = "clerk",
+  emptyText,
+  usLabel,
+  clerkLabel,
+  large = false,
 }: {
   entries: TranscriptEntry[];
   liveText?: string;
   liveSide?: "clerk" | "us";
+  emptyText?: string;
+  usLabel?: string;
+  clerkLabel?: string;
+  large?: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +36,7 @@ export default function CaptionFeed({
     >
       {empty ? (
         <p className="flex min-h-[12rem] flex-1 items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--border)] bg-raised px-4 py-8 text-center text-base text-[var(--muted)]">
-          {t("call.clerk_input_placeholder")}
+          {emptyText ?? t("call.clerk_input_placeholder")}
         </p>
       ) : (
         entries.map((entry, index) => {
@@ -41,9 +49,9 @@ export default function CaptionFeed({
               }`}
             >
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                {isUs ? t("call.you") : t("call.clerk")}
+                {isUs ? usLabel ?? t("call.you") : clerkLabel ?? t("call.clerk")}
               </p>
-              <p className="font-serif text-xl leading-snug">{entry.text}</p>
+              <p className={`font-serif leading-snug ${large ? "text-2xl sm:text-3xl" : "text-xl"}`}>{entry.text}</p>
             </article>
           );
         })
@@ -55,7 +63,9 @@ export default function CaptionFeed({
           }`}
         >
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            {liveSide === "us" ? t("call.you") : t("call.clerk")}
+            {liveSide === "us"
+              ? usLabel ?? t("call.you")
+              : clerkLabel ?? t("call.clerk")}
           </p>
           <p className="font-serif text-xl leading-snug text-[var(--muted)]">
             {liveText}

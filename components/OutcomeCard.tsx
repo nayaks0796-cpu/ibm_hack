@@ -7,6 +7,7 @@ import type { Outcome } from "@/lib/types";
 
 const RESULT_KEY = {
   resolved: "outcome.result.resolved",
+  answered: "outcome.result.answered",
   refused: "outcome.result.refused",
   "no-answer": "outcome.result.no_answer",
   incomplete: "outcome.result.incomplete",
@@ -19,14 +20,19 @@ export default function OutcomeCard({
   outcome: Outcome;
   playbookTitle: string;
 }) {
+  const headline =
+    outcome.referenceNumber ??
+    outcome.capturedAnswer ??
+    (outcome.result === "resolved" ? t("outcome.help_dispatched") : "—");
+  const headlineLabel = outcome.referenceNumber
+    ? t("outcome.reference")
+    : t("outcome.answer");
   const resultLabel = t(RESULT_KEY[outcome.result]);
 
   return (
     <div className="flex w-full flex-col gap-5 rounded-[1.75rem] border border-[var(--border)] bg-raised p-7 shadow-card">
-      <p className="eyebrow">{t("outcome.reference")}</p>
-      <p className="font-serif text-5xl tracking-[-0.03em]">
-        {outcome.referenceNumber ?? "—"}
-      </p>
+      <p className="eyebrow">{headlineLabel}</p>
+      <p className="font-serif text-5xl tracking-[-0.03em]">{headline}</p>
 
       <div className="grid grid-cols-1 gap-1">
         <MetaRow
@@ -34,7 +40,7 @@ export default function OutcomeCard({
           value={
             <span
               className={`inline-flex min-h-9 items-center rounded-full px-3 text-sm font-semibold ${
-                outcome.result === "resolved"
+                outcome.result === "resolved" || outcome.result === "answered"
                   ? "bg-signal/15 text-signal"
                   : "bg-highlight/20 text-highlight-ink"
               }`}

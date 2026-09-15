@@ -1,0 +1,45 @@
+{
+  "id": "lab-report",
+  "icon": "file-text",
+  "category": "health",
+  "channel": "phone-human",
+  "outcomeKind": "answer",
+  "title": {
+    "en": "Lab report",
+    "hi": "लैब रिपोर्ट",
+    "ta": "ஆய்வக அறிக்கை",
+    "te": "ల్యాబ్ రిపోర్ట్",
+    "kn": "ಲ್ಯಾಬ್ ವರದಿ",
+    "ml": "ലാബ് റിപ്പോർട്ട്",
+    "mr": "लॅब अहवाल",
+    "bn": "ল্যাব রিপোর্ট"
+  },
+  "goal": {
+    "en": "Find out if the lab report is ready and how to collect it",
+    "hi": "लैब रिपोर्ट तैयार है या नहीं, और कैसे लें"
+  },
+  "defaultCallLanguage": "hi",
+  "keyterms": ["lab", "report", "sample", "ready", "collect", "रिपोर्ट", "लैब", "तैयार"],
+  "stages": [
+    { "id": "intro", "en": "Introduce and say you are calling for a lab report.", "hi": "परिचय दें और लैब रिपोर्ट के लिए कॉल बताएँ।" },
+    { "id": "id", "en": "Give patient name and test date when asked.", "hi": "पूछे जाने पर मरीज का नाम और टेस्ट की तारीख दें।" },
+    { "id": "answer", "en": "Ask if the report is ready and pin that answer.", "hi": "रिपोर्ट तैयार है या नहीं, पूछें और उत्तर पिन करें।" }
+  ],
+  "facts": [
+    {
+      "key": "hospital_name",
+      "label": { "en": "Hospital / lab name", "hi": "अस्पताल / लैब का नाम" },
+      "required": true
+    },
+    {
+      "key": "patient_name",
+      "label": { "en": "Patient name", "hi": "मरीज का नाम" },
+      "required": true
+    },
+    {
+      "key": "test_date",
+      "label": { "en": "Test date", "hi": "टेस्ट की तारीख" },
+      "required": false
+    }
+  ]
+}

@@ -19,7 +19,7 @@ const instrument = Instrument_Serif({
 export const metadata: Metadata = {
   title: "Sampark — a phone relay for deaf and non-verbal India",
   description:
-    "Sampark helps deaf and non-verbal people make official phone calls via live captions and reply suggestions.",
+    "Sampark helps deaf and non-verbal people make official phone calls via live captions, ISL depiction, and reply suggestions.",
   manifest: "/manifest.json",
 };
 

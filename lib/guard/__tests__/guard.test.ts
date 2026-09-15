@@ -1,5 +1,9 @@
 import { containsSensitiveCode } from "../otp";
-import { detectReferenceNumbers } from "../refnum";
+import {
+  clerkSpokenReferenceNumbers,
+  detectReferenceNumbers,
+  isClerkSpokenReference,
+} from "../refnum";
 import { redact } from "../redact";
 
 // ── OTP / PIN blocker ──────────────────────────────────────────────────────────
@@ -35,6 +39,17 @@ describe("containsSensitiveCode", () => {
 
   test("does NOT block PIN letters inside another word", () => {
     expect(containsSensitiveCode("Keep spinning 123456")).toBe(false);
+  });
+
+  test("blocks Aadhaar followed by 12 digits", () => {
+    expect(containsSensitiveCode("Aadhaar 1234 5678 9012")).toBe(true);
+    expect(containsSensitiveCode("आधार 123456789012")).toBe(true);
+  });
+
+  test("does NOT treat a consumer number as Aadhaar", () => {
+    expect(containsSensitiveCode("My consumer number is 123456789012")).toBe(
+      false
+    );
   });
 });
 
@@ -76,6 +91,42 @@ describe("detectReferenceNumbers", () => {
 
   test("returns empty array for 5-digit number without keyword", () => {
     expect(detectReferenceNumbers("call 98765")).toEqual([]);
+  });
+});
+
+describe("clerkSpokenReferenceNumbers", () => {
+  test("only counts clerk captions, never our side", () => {
+    const refs = clerkSpokenReferenceNumbers([
+      {
+        t: 1,
+        side: "us",
+        source: "tts-sent",
+        text: "complaint number COMP-9999",
+        redacted: false,
+      },
+      {
+        t: 2,
+        side: "clerk",
+        source: "stt",
+        text: "Your complaint number is COMP-4821.",
+        redacted: false,
+      },
+    ]);
+    expect(refs).toEqual(["COMP-4821"]);
+  });
+
+  test("isClerkSpokenReference is false for invented pins", () => {
+    expect(
+      isClerkSpokenReference("COMP-4821", [
+        {
+          t: 1,
+          side: "clerk",
+          source: "stt",
+          text: "Please hold.",
+          redacted: false,
+        },
+      ])
+    ).toBe(false);
   });
 });
 

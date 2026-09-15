@@ -7,7 +7,9 @@ export function tryClaimSpeech(msgId?: string, timeoutMs = 8000): boolean {
 
   const key = `sampark_speech_claimed_${msgId}`;
   try {
-    const existing = sessionStorage.getItem(key) || localStorage.getItem(key);
+    // localStorage only — sessionStorage is per-tab and would let /clerk
+    // replay the same utterance in a second voice on the same computer.
+    const existing = localStorage.getItem(key);
     const now = Date.now();
     if (existing) {
       const ts = Number(existing);
@@ -15,15 +17,11 @@ export function tryClaimSpeech(msgId?: string, timeoutMs = 8000): boolean {
         return false; // Already claimed and spoken recently!
       }
     }
-    sessionStorage.setItem(key, String(now));
-    try {
-      localStorage.setItem(key, String(now));
-    } catch {}
+    localStorage.setItem(key, String(now));
 
     // Cleanup old key
     setTimeout(() => {
       try {
-        sessionStorage.removeItem(key);
         localStorage.removeItem(key);
       } catch {}
     }, timeoutMs + 2000);

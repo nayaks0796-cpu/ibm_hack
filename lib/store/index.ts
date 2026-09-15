@@ -25,6 +25,7 @@ const DEFAULT_PROFILE: UserProfile = {
   voice: defaultVoiceId("en"),
   islAvatar: true,
   accessNeed: "both",
+  location: "",
 };
 
 function resolveAccessNeed(value: unknown): AccessNeed {

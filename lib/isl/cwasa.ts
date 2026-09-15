@@ -6,6 +6,8 @@
 import { getSignFile, getSignIndex } from "./catalog";
 import { alignGlossToCatalog } from "./mapGloss";
 
+type CwasaHookEvt = { typ?: string; av?: number; msg?: string };
+
 declare global {
   interface Window {
     CWASA?: {
@@ -14,21 +16,34 @@ declare global {
       playSiGMLURL: (url: string, av?: number) => string;
       playSiGMLText: (text: string, av?: number) => string;
       stopSiGML: (av?: number) => string;
+      addHook?: (name: string, fn: (evt?: CwasaHookEvt) => void) => void;
     };
+    getCWAEnv?: () => { get: (name: string) => any };
   }
 }
 
-// Suppress benign Animgen / jagid allocation notices from popping up in Next.js dev overlay
+function isAnimgenNoise(value: unknown): boolean {
+  const msg = String(value ?? "");
+  return /animgen|jagid|allcsa|animgenAllocate/i.test(msg);
+}
+
+// Animgen logs "animgenAllocate: jagid: 0" on success. Next.js treats console.error
+// as an overlay issue and overlapping plays then deadlock in Alloc.
 if (typeof window !== "undefined") {
+  const origError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    if (args.some(isAnimgenNoise)) {
+      console.debug(...args);
+      return;
+    }
+    origError(...args);
+  };
+
   window.addEventListener(
     "error",
     (event) => {
       const msg = event?.message ? String(event.message) : "";
-      if (
-        msg.includes("animgen") ||
-        msg.includes("jagid") ||
-        msg.includes("allcsa")
-      ) {
+      if (isAnimgenNoise(msg)) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -39,12 +54,7 @@ if (typeof window !== "undefined") {
   window.addEventListener(
     "unhandledrejection",
     (event) => {
-      const reason = event?.reason ? String(event.reason) : "";
-      if (
-        reason.includes("animgen") ||
-        reason.includes("jagid") ||
-        reason.includes("allcsa")
-      ) {
+      if (isAnimgenNoise(event?.reason)) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -96,13 +106,27 @@ export function attachCwasaHost(slot: HTMLElement): HTMLElement {
   host.style.width = "100%";
   host.style.height = "100%";
   host.style.display = "block";
-  slot.appendChild(host);
+  host.style.visibility = "visible";
+  if (host.parentNode !== slot) slot.appendChild(host);
   return host;
 }
 
 export function detachCwasaHost(slot: HTMLElement): void {
   const host = document.getElementById(HOST_ID);
   if (host && host.parentNode === slot) parkCwasaHost();
+}
+
+/** After the avatar slot returns on-screen, nudge CWASA so WebGL redraws. */
+export function refreshCwasaLayout(): void {
+  const host = document.getElementById(HOST_ID);
+  if (!host) return;
+  void host.offsetWidth;
+  const canvas = host.querySelector("canvas");
+  if (canvas instanceof HTMLCanvasElement) {
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+  }
+  window.dispatchEvent(new Event("resize"));
 }
 
 function loadCss(): void {
@@ -213,12 +237,76 @@ export function bootCwasa(): Promise<void> {
     }
 
     await waitFor(".CWASAAvatar.av0 canvas", 45000);
+    await prepareAnimgen();
   })().catch((error) => {
     bootPromise = null;
     throw error;
   });
 
   return bootPromise;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/** Wait until WASM Animgen, H-to-G XSLT, and Anna's JAR config are actually usable. */
+async function prepareAnimgen(): Promise<void> {
+  const env = window.getCWAEnv?.();
+  if (!env?.get) return;
+
+  try {
+    const agi = env.get("AGI");
+    if (agi?.Ready) await Promise.race([agi.Ready, sleep(8000)]);
+  } catch {
+    // Avatar still renders; first playSignWord will retry.
+  }
+
+  try {
+    const xsltLoad = env.get("SigningAvatar")?.H2G?.XSLTProc?.load;
+    if (xsltLoad) await Promise.race([xsltLoad, sleep(8000)]);
+  } catch {
+    // HtoG may still load in the background.
+  }
+
+  try {
+    const AvCache = env.get("AvCache");
+    const common = AvCache?.get?.("COMMON");
+    const anna = AvCache?.get?.("anna");
+    if (common?.getZIPEnt && anna?.getZIPEnt) {
+      await Promise.race([
+        Promise.all([
+          common.getZIPEnt("config"),
+          anna.getZIPEnt("config"),
+          anna.getZIPEnt("asd"),
+          anna.getZIPEnt("nonManuals"),
+        ]),
+        sleep(15000),
+      ]);
+    }
+  } catch {
+    // PrepInstance will fetch JARs on the first sign if prefetch fails.
+  }
+
+  installPlayHooks();
+}
+
+const AGI_STATE_ALLOC = 2;
+const AGI_STATE_AVATAR_SET = 3;
+const AGI_STATE_SEQ_IN_PROGRESS = 5;
+
+function resetStuckAnimgen(): void {
+  try {
+    const inst = window.getCWAEnv?.()?.get?.("AGI")?.Get?.(0);
+    if (!inst) return;
+    if (inst.state === AGI_STATE_ALLOC) {
+      inst.DeAlloc?.();
+    } else if (inst.state === AGI_STATE_SEQ_IN_PROGRESS) {
+      inst.state = AGI_STATE_AVATAR_SET;
+    }
+  } catch {
+    // Leave CWASA to recover on the next play.
+  }
 }
 
 async function fetchSignXml(fileName: string): Promise<string | null> {
@@ -255,26 +343,85 @@ export async function glossToSigml(gloss: string[]): Promise<string> {
   return `<sigml>\n${parts.join("\n")}\n</sigml>`;
 }
 
-let sigmlTimer: any = null;
+let playGate: Promise<void> = Promise.resolve();
+let hooksInstalled = false;
+const playWaiters = new Set<(typ: string, msg?: string) => void>();
 
-export function playSigml(sigml: string): void {
-  if (!window.CWASA || !/<hns_sign|<hamnosys/i.test(sigml)) return;
-  try {
-    try {
-      window.CWASA.stopSiGML?.(0);
-    } catch {}
+function notifyPlay(typ: string, msg?: string): void {
+  for (const waiter of [...playWaiters]) waiter(typ, msg);
+}
 
-    if (sigmlTimer) clearTimeout(sigmlTimer);
-    sigmlTimer = setTimeout(() => {
-      try {
-        window.CWASA?.playSiGMLText?.(sigml, 0);
-      } catch {
-        // Animgen throws if the avatar JAR is still loading; gloss still shows.
+function installPlayHooks(): void {
+  if (hooksInstalled || !window.CWASA?.addHook) return;
+  hooksInstalled = true;
+  const wrap =
+    (fallback: string) =>
+    (evt?: CwasaHookEvt) => {
+      notifyPlay(evt?.typ || fallback, evt?.msg);
+    };
+  window.CWASA.addHook("sigmlloading", wrap("sigmlloading"));
+  window.CWASA.addHook("sigmlloaded", wrap("sigmlloaded"));
+  window.CWASA.addHook("animidle", wrap("animidle"));
+  window.CWASA.addHook("status", wrap("status"));
+}
+
+function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let sawLoading = false;
+    const timer = window.setTimeout(finish, timeoutMs);
+    const waiter = (typ: string, msg?: string) => {
+      if (
+        typ === "sigmlloading" ||
+        (typ === "status" && /SiGML Loading/i.test(msg || ""))
+      ) {
+        sawLoading = true;
+        return;
       }
-    }, 60);
+      const failed =
+        typ === "status" &&
+        /invalid|Cannot process|No valid|No signs|not loaded/i.test(msg || "");
+      if (typ === "sigmlloaded" || typ === "animidle" || failed) {
+        if (!sawLoading && typ === "animidle") return;
+        finish();
+      }
+    };
+    function finish() {
+      window.clearTimeout(timer);
+      playWaiters.delete(waiter);
+      resolve();
+    }
+    playWaiters.add(waiter);
+  });
+}
+
+async function playSigmlNow(sigml: string): Promise<void> {
+  if (!window.CWASA || !/<hns_sign|<hamnosys/i.test(sigml)) return;
+  await bootCwasa();
+  installPlayHooks();
+  resetStuckAnimgen();
+
+  const settled = waitUntilPlaySettled(12000);
+  let started = false;
+  try {
+    const result = window.CWASA.playSiGMLText?.(sigml, 0) ?? "";
+    started = !/undefined avatar/i.test(result);
   } catch {
-    // Suppressed
+    started = false;
   }
+  if (!started) {
+    notifyPlay("sigmlloaded");
+    return;
+  }
+  await settled;
+}
+
+export function playSigml(sigml: string): Promise<void> {
+  const run = playGate.then(() => playSigmlNow(sigml));
+  playGate = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
 }
 
 export async function playSignWord(word: string): Promise<boolean> {
@@ -297,7 +444,7 @@ export async function playSignWord(word: string): Promise<boolean> {
   }
 
   if (xml) {
-    playSigml(`<sigml>\n${xml}\n</sigml>`);
+    await playSigml(`<sigml>\n${xml}\n</sigml>`);
     return true;
   }
   return false;
