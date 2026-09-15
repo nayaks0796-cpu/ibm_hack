@@ -121,7 +121,9 @@ export class CallRoom {
       this.sendPresence();
       this.expirePeerIfStale();
     }, HEARTBEAT_MS);
-    void this.pollLoop();
+    if (this.httpHubEnabled()) {
+      void this.pollLoop();
+    }
   }
 
   private readStoredPresence(): void {
@@ -429,7 +431,13 @@ export class CallRoom {
     }
   }
 
+  /** HTTP long-poll/post. Off in `next dev` — the flood locks Windows `.next` and 404s CSS. */
+  private httpHubEnabled(): boolean {
+    return process.env.NODE_ENV === "production";
+  }
+
   private postHub(msg: CallRoomMessage): void {
+    if (!this.httpHubEnabled()) return;
     try {
       void fetch("/api/room-relay", {
         method: "POST",

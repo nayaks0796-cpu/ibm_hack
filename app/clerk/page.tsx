@@ -218,7 +218,7 @@ export default function ClerkPage() {
   isListeningRef.current = isListening;
   const echoUntilRef = useRef(0);
   const lastUserTtsRef = useRef("");
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdTimerRef = useRef<number | null>(null);
 
   function clearEchoHoldTimer() {
     if (holdTimerRef.current != null) {

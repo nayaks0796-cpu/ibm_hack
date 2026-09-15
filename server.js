@@ -36,6 +36,10 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 
+if (process.env.npm_lifecycle_event === "start" && !process.env.NODE_ENV) {
+  process.env.NODE_ENV = "production";
+}
+
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });
 const handle = app.getRequestHandler();

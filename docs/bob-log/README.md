@@ -1,12 +1,10 @@
 # Bob session log
 
-One screenshot set per IBM Bob session. Name files like:
+How IBM Bob was used, matched to git and the current app: [`../../IBM_BOB.md`](../../IBM_BOB.md).
 
-- `01-tanish-scaffold.png`
-- `02-satyeta-watsonx-client.png`
-- `03-arya-outcome-screen.png`
-- `04-satyeta-watson-fallback.png`
-- `05-tanish-final-review.png`
+This folder was created in Bob’s first commit for session screenshots (prompt, plan, diff). **No screenshot files are in the repo.** The evidence that is in git:
 
-Capture: the prompt you gave Bob, its plan, and the final diff. These are the judging
-evidence that IBM Bob built the IBM spine of Sampark. Never claim Bob work without a file here.
+- `376fabf` — author `IBM Bob <bob@setu>` — `bob: add AGENTS.md contract and scaffold Setu app`
+- `0afc7f9` — author `Tanish M` — `bob: review and publish current Sampark working tree`
+
+If a later session is captured, drop PNGs here with names like `01-tanish-scaffold.png`. Do not point judges at files that are not in the tree.

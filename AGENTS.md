@@ -62,9 +62,9 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 | Job | Service | Notes |
 |---|---|---|
 | Captions (STT) | ElevenLabs Scribe v2 Realtime (`scribe_v2_realtime`) | Hindi + English + mixed; keyterm prompting with user facts. Only STT layer — if Scribe fails, show "captions off" and keep the typed clerk-line path. |
-| Speech out (TTS) | ElevenLabs (`eleven_flash_v2_5`, or `eleven_multilingual_v2` if latency allows) | One voice speaks both Hindi and English; server proxy only |
+| Speech out (TTS) | ElevenLabs `eleven_flash_v2_5` | Hindi and English; server proxy only |
 | Last-resort TTS | Browser `speechSynthesis` | Only if ElevenLabs fails; show "demo voice" banner |
-| LLM | Llama 3.3 70B Instruct on IBM watsonx.ai | Reply suggestions, fact/number extraction, ISL gloss. Temperature ~0.2, JSON output only |
+| LLM | Groq `openai/gpt-oss-120b` (GPT-OSS-120B) | Reply suggestions and ISL gloss. Temperature ~0.2, JSON only. File is `lib/watsonx/llama.ts` (historical name). Optional: `LLM_PROVIDER=watsonx` → Llama 3.3 70B Instruct — not the default. |
 | ISL avatar | CWASA SiGML player + sign files vendored from github.com/shoebham/text_to_isl | Unknown words fingerspell; credit the repo in README |
 | Phone (phase 2) | Exotel Connect API + AgentStream bidirectional WSS | Trial: verified numbers only |
 | Frontend | Next.js (App Router, TypeScript, Tailwind), PWA | `next-intl` for 8 UI languages |
@@ -91,14 +91,14 @@ The user replies by tapping a suggestion and pressing Send, or by unmuting and s
 ## Repo structure
 
 ```
-setu/
-  app/                    # Next.js routes: / (setup), /start, /call, /outcome
+sampark/
+  app/                    # Next.js routes: / (landing), /setup, /start, /call, /clerk, /outcome
   components/             # CaptionFeed, ReplySuggestions, ISLAvatar, DTMFPad,
                           # OutcomeCard, SilenceRing, UnmuteButton
   lib/
     transport/            # AudioTransport interface, RoomTransport, ExotelTransport (stub)
     elevenlabs/           # scribe client (browser, token-based), tts client
-    watsonx/              # Llama client: suggest(), extractFacts(), gloss()
+    watsonx/              # LLM client (Groq GPT-OSS-120B default): suggest(), gloss()
     guard/                # OTP/PIN blocker, reference-number detector, redaction
     store/                # localStorage/IndexedDB helpers
   server/                 # API routes: scribe-token, tts, suggest, gloss
@@ -106,7 +106,8 @@ setu/
   playbooks/              # power-cut.json, bank.json, hospital.json
   messages/               # i18n strings: en.json, hi.json, ta.json, te.json,
                           # kn.json, ml.json, mr.json, bn.json
-  docs/bob-log/           # screenshots of every IBM Bob session
+  docs/bob-log/           # Bob session log (README; no PNGs in repo)
+  IBM_BOB.md              # how IBM Bob was used (SkillBuild required)
   AGENTS.md               # this file
   TEAM_GUIDE.md           # who builds what, how to use agents
 ```
@@ -192,6 +193,9 @@ calls only if the user taps "Save these facts for next time" on the outcome scre
 
 ```
 ELEVENLABS_API_KEY=
+LLM_PROVIDER=groq
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-120b
 WATSONX_API_KEY=
 WATSONX_PROJECT_ID=
 WATSONX_URL=https://us-south.ml.cloud.ibm.com
@@ -201,7 +205,7 @@ WATSONX_MODEL=meta-llama/llama-3-3-70b-instruct
 ## Build order (each step gated on the previous — see plan)
 
 1. Contract + scaffold → 2. Clickable skeleton (fake data) → 3. ISL avatar boots →
-4. Scribe captions → 5. ElevenLabs TTS + barge-in → 6. Llama reply suggestions →
+4. Scribe captions → 5. ElevenLabs TTS + barge-in → 6. GPT-OSS reply suggestions →
 7. Guards → 8. Captions-failed UI (no second STT vendor) → 9. ISL gloss live → 10. Bank + hospital playbooks,
 DTMF, failure states → 11. 8 UI languages → 12. Demo hardening → 13. Exotel (stretch).
 

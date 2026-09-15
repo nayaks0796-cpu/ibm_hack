@@ -15,7 +15,12 @@ node_modules/
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
+.idea/
+
+# hosting
+.railway/
 
 # debug
 npm-debug.log*

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Figtree, Instrument_Serif } from "next/font/google";
 import I18nProvider from "@/components/I18nProvider";
 import "./globals.css";
@@ -20,7 +20,17 @@ export const metadata: Metadata = {
   title: "Sampark — a phone relay for deaf and non-verbal India",
   description:
     "Sampark helps deaf and non-verbal people make official phone calls via live captions, ISL depiction, and reply suggestions.",
+  applicationName: "Sampark",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Sampark",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0e7c72",
 };
 
 export default function RootLayout({
@@ -30,6 +40,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${figtree.variable} ${instrument.variable}`}>
+      <head>
+        <link rel="stylesheet" href="/sampark.css" />
+      </head>
       <body className="min-h-screen overflow-x-hidden bg-paper font-sans text-ink antialiased">
         <I18nProvider>{children}</I18nProvider>
       </body>

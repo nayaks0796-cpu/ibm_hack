@@ -35,7 +35,7 @@ type PremadeVoice = {
   previewUrl?: string;
 };
 
-/** Premade voices confirmed usable on the current free ElevenLabs key. */
+/** Four premade voices per call language (2 male, 2 female). */
 const PREMADE_VOICES: PremadeVoice[] = [
   {
     slug: "george",
@@ -47,23 +47,6 @@ const PREMADE_VOICES: PremadeVoice[] = [
   { slug: "sarah", name: "Sarah", elevenLabsId: "EXAVITQu4vr4xnSDxMaL" },
   { slug: "daniel", name: "Daniel", elevenLabsId: "onwK4e9ZLuTAKqWW03F9" },
   { slug: "alice", name: "Alice", elevenLabsId: "Xb7hH8MSUJpSbSDYk0k2" },
-  { slug: "roger", name: "Roger", elevenLabsId: "CwhRBWXzGAHq8TQ4Fs17" },
-  { slug: "eric", name: "Eric", elevenLabsId: "cjVigY5qzO86Huf0OWal" },
-  { slug: "jessica", name: "Jessica", elevenLabsId: "cgSgspJ2msm6clMCkdW9" },
-  { slug: "lily", name: "Lily", elevenLabsId: "pFZP5JQG7iQjIQuC4Bku" },
-  { slug: "matilda", name: "Matilda", elevenLabsId: "XrExE9yKIg1WjnnlVkGX" },
-  { slug: "bella", name: "Bella", elevenLabsId: "hpp4J3VqNfWAUOO0d1Us" },
-  { slug: "chris", name: "Chris", elevenLabsId: "iP95p4xoKVk53GoZ742B" },
-  { slug: "brian", name: "Brian", elevenLabsId: "nPczCjzI2devNBz1zQrb" },
-  { slug: "will", name: "Will", elevenLabsId: "bIHbv24MWmeRgasZH58o" },
-  { slug: "river", name: "River", elevenLabsId: "SAz9YHcvj6GT2YYXdXww" },
-  { slug: "liam", name: "Liam", elevenLabsId: "TX3LPaxmHKxFdv7VOQHJ" },
-  { slug: "charlie", name: "Charlie", elevenLabsId: "IKne3meq5aSn9XLyUdCD" },
-  { slug: "bill", name: "Bill", elevenLabsId: "pqHfZKP75CvOlQylNhV4" },
-  { slug: "adam", name: "Adam", elevenLabsId: "pNInz6obpgDQGcFmaJgB" },
-  { slug: "laura", name: "Laura", elevenLabsId: "FGY2WhTYpPnrIDTdsKH5" },
-  { slug: "callum", name: "Callum", elevenLabsId: "N2lVS1w4EtoT3dr4eOWO" },
-  { slug: "harry", name: "Harry", elevenLabsId: "SOYHLrjzK2X1ezoPC6cr" },
 ];
 
 function catalogId(lang: CallLanguage, slug: string, index: number): string {

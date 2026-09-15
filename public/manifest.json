@@ -1,10 +1,21 @@
 {
   "name": "Sampark",
   "short_name": "Sampark",
-  "description": "Assistive relay for official phone calls",
+  "description": "Assistive phone relay for deaf and non-verbal India — live captions, ISL, and reply suggestions.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f7f6f3",
   "theme_color": "#0e7c72",
-  "icons": []
+  "lang": "en",
+  "categories": ["accessibility", "utilities"],
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }

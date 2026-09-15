@@ -263,7 +263,7 @@ export default function SetupPage() {
           <fieldset>
             <legend className="mb-1 text-sm font-semibold">{t("setup.voice")}</legend>
             <p className="mb-3 text-sm text-[var(--muted)]">{t("setup.voice_hint")}</p>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2">
               {availableVoices.map((option) => {
                 const selected = voice === option.id;
                 const previewing = previewingId === option.id;
