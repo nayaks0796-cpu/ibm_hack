@@ -16,10 +16,10 @@
     "dev:ws": "node server.js"
   },
   "dependencies": {
-    "next": "15.3.3",
+    "next": "^15.5.25",
+    "next-intl": "^3.26.5",
     "react": "^19",
     "react-dom": "^19",
-    "next-intl": "^3.26.5",
     "ws": "^8.21.3"
   },
   "devDependencies": {
