@@ -68,6 +68,7 @@ export default function StartPage() {
   const [userBrief, setUserBrief] = useState("");
   const [sosBusy, setSosBusy] = useState(false);
   const [speakTarget, setSpeakTarget] = useState<string | null>(null);
+  const [showMissingWarning, setShowMissingWarning] = useState(false);
   const speakTargetRef = useRef<string | null>(null);
   const firstFinalRef = useRef(true);
 
@@ -142,6 +143,7 @@ export default function StartPage() {
     const next = getPlaybook(id);
     if (!next) return;
     setPlaybookId(next.id);
+    setShowMissingWarning(false);
     stopSpeak();
     setFacts((current) =>
       factsForPlaybook(
@@ -175,7 +177,19 @@ export default function StartPage() {
     router.push("/call");
   }
 
+  function missingRequiredFacts(): string[] {
+    return playbook.facts
+      .filter((f) => f.required && !(facts[f.key] ?? "").trim())
+      .map((f) => f.label[uiLanguage] ?? f.label.en ?? f.key);
+  }
+
   async function startCall() {
+    const missing = missingRequiredFacts();
+    if (missing.length > 0 && !showMissingWarning) {
+      setShowMissingWarning(true);
+      return;
+    }
+    setShowMissingWarning(false);
     const callFacts = factsForPlaybook(
       playbook.facts.map((fact) => fact.key),
       facts
@@ -207,9 +221,14 @@ export default function StartPage() {
   return (
     <AppChrome
       aside={
-        <Link href="/setup" className="text-sm font-semibold text-[var(--muted)] transition-colors hover:text-ink">
-          {t("start.edit_setup")}
-        </Link>
+        <div className="flex items-center gap-5">
+          <Link href="/history" className="text-sm font-semibold text-[var(--muted)] transition-colors hover:text-ink">
+            {t("history.title")}
+          </Link>
+          <Link href="/setup" className="text-sm font-semibold text-[var(--muted)] transition-colors hover:text-ink">
+            {t("start.edit_setup")}
+          </Link>
+        </div>
       }
     >
       <main className="mx-auto w-full max-w-3xl px-6 pb-20 sm:px-10">
@@ -373,6 +392,32 @@ export default function StartPage() {
                   </p>
                 ) : null}
               </section>
+            )}
+
+            {showMissingWarning && !playbook.emergency && (
+              <div className="mt-6 rounded-2xl border border-highlight/60 bg-highlight/10 px-5 py-4">
+                <p className="text-sm font-semibold text-highlight-ink">
+                  {t("start.missing_facts_warning", {
+                    fields: missingRequiredFacts().join(", "),
+                  })}
+                </p>
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void startCall()}
+                    className="gold-btn min-h-12 px-6 text-base"
+                  >
+                    {t("start.call_button")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowMissingWarning(false)}
+                    className="ghost-btn min-h-12 px-6 text-base"
+                  >
+                    {t("history.back")}
+                  </button>
+                </div>
+              </div>
             )}
 
             <div className="mt-10 flex justify-end">

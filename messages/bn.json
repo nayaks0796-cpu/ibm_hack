@@ -207,5 +207,21 @@
     "call.official":  "কর্তৃপক্ষ",
     "outcome.result.answered":  "উত্তর পাওয়া গেছে",
     "outcome.answer":  "উত্তর",
-    "outcome.help_dispatched":  "সাহায্য পাঠানো হয়েছে"
+    "outcome.help_dispatched":  "সাহায্য পাঠানো হয়েছে",
+    "outcome.copy":  "Copy",
+    "outcome.copied":  "Copied!",
+    "outcome.share":  "Share",
+    "outcome.share_text":  "Sampark call — {playbook} · {result} · {ref}",
+    "call.repeat_last":  "Repeat last",
+    "start.missing_facts_warning":  "Missing: {fields}. The clerk may ask for these. Continue anyway?",
+    "history.title":  "কল ইতিহাস",
+    "history.empty":  "এখনো কোনো কল নেই।",
+    "history.back":  "Back",
+    "history.result.resolved":  "Resolved",
+    "history.result.answered":  "Answered",
+    "history.result.refused":  "Refused",
+    "history.result.no_answer":  "No answer",
+    "history.result.incomplete":  "Incomplete",
+    "history.clear":  "Clear history",
+    "history.clear_confirm":  "Delete all call history from this phone?"
 }

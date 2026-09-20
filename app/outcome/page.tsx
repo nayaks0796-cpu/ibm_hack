@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppChrome from "@/components/AppChrome";
 import OutcomeCard from "@/components/OutcomeCard";
@@ -61,7 +62,16 @@ export default function OutcomePage() {
     [];
 
   return (
-    <AppChrome>
+    <AppChrome
+      aside={
+        <Link
+          href="/history"
+          className="text-sm font-semibold text-[var(--muted)] transition-colors hover:text-ink"
+        >
+          {t("history.title")}
+        </Link>
+      }
+    >
       <main className="mx-auto flex w-full max-w-lg flex-col items-center px-6 pb-20">
         <p className="eyebrow animate-fade-up">{t("app.title")}</p>
         <h1 className="mt-3 font-serif text-5xl tracking-[-0.03em] animate-fade-up">

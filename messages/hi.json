@@ -207,5 +207,21 @@
     "call.official":  "अधिकारी",
     "outcome.result.answered":  "उत्तर मिल गया",
     "outcome.answer":  "उत्तर",
-    "outcome.help_dispatched":  "मदद भेज दी गई"
+    "outcome.help_dispatched":  "मदद भेज दी गई",
+    "outcome.copy":  "कॉपी",
+    "outcome.copied":  "कॉपी हो गया!",
+    "outcome.share":  "शेयर",
+    "outcome.share_text":  "Sampark कॉल — {playbook} · {result} · {ref}",
+    "call.repeat_last":  "पिछला दोहराएँ",
+    "start.missing_facts_warning":  "अनुपलब्ध: {fields}। क्लर्क इन्हें पूछ सकते हैं। फिर भी जारी रखें?",
+    "history.title":  "कॉल इतिहास",
+    "history.empty":  "अभी तक कोई कॉल नहीं। पहली कॉल करें।",
+    "history.back":  "वापस",
+    "history.result.resolved":  "हल हो गया",
+    "history.result.answered":  "उत्तर मिला",
+    "history.result.refused":  "अस्वीकार",
+    "history.result.no_answer":  "कोई जवाब नहीं",
+    "history.result.incomplete":  "अधूरा",
+    "history.clear":  "इतिहास मिटाएँ",
+    "history.clear_confirm":  "इस फोन से सभी कॉल इतिहास हटाएँ?"
 }

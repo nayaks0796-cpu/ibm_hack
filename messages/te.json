@@ -207,5 +207,21 @@
     "call.official":  "అధికారి",
     "outcome.result.answered":  "సమాధానం వచ్చింది",
     "outcome.answer":  "సమాధానం",
-    "outcome.help_dispatched":  "సహాయం పంపబడింది"
+    "outcome.help_dispatched":  "సహాయం పంపబడింది",
+    "outcome.copy":  "Copy",
+    "outcome.copied":  "Copied!",
+    "outcome.share":  "Share",
+    "outcome.share_text":  "Sampark call — {playbook} · {result} · {ref}",
+    "call.repeat_last":  "Repeat last",
+    "start.missing_facts_warning":  "Missing: {fields}. The clerk may ask for these. Continue anyway?",
+    "history.title":  "కాల్ చరిత్ర",
+    "history.empty":  "ఇంకా కాల్‌లు లేవు.",
+    "history.back":  "Back",
+    "history.result.resolved":  "Resolved",
+    "history.result.answered":  "Answered",
+    "history.result.refused":  "Refused",
+    "history.result.no_answer":  "No answer",
+    "history.result.incomplete":  "Incomplete",
+    "history.clear":  "Clear history",
+    "history.clear_confirm":  "Delete all call history from this phone?"
 }

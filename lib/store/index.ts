@@ -111,6 +111,10 @@ export function loadOutcomes(): Outcome[] {
   return readJson(localStorage, OUTCOMES_KEY, []);
 }
 
+export function clearOutcomes(): void {
+  localStorage.removeItem(OUTCOMES_KEY);
+}
+
 export function loadLastOutcome(): Outcome | null {
   const fromSession = readJson<Outcome | null>(sessionStorage, LAST_OUTCOME_KEY, null);
   if (fromSession) return fromSession;

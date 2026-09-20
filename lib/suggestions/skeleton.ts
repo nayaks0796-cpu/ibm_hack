@@ -851,11 +851,12 @@ export function finalizeReplySuggestions({
 }
 
 export function alwaysPresentSuggestions(
-  callLanguage: CallLanguage
+  callLanguage: CallLanguage,
+  lastSpokenSentence?: string
 ): ReplySuggestion[] {
   const give = giveFor(callLanguage);
 
-  return [
+  const base: ReplySuggestion[] = [
     {
       id: "always-wait",
       label: t("call.wait"),
@@ -880,4 +881,14 @@ export function alwaysPresentSuggestions(
       ),
     },
   ];
+
+  if (lastSpokenSentence?.trim()) {
+    base.push({
+      id: "always-repeat-last",
+      label: t("call.repeat_last"),
+      sentence: lastSpokenSentence.trim(),
+    });
+  }
+
+  return base;
 }

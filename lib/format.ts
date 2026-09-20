@@ -5,6 +5,17 @@ export function formatDuration(startedAt: number, endedAt: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export function formatCallDate(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function missingFactSentence(callLanguage: "hi" | "en"): string {
   return callLanguage === "hi"
     ? "मैं जाँच करके बताऊँगा।"

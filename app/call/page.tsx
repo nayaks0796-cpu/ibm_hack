@@ -151,6 +151,7 @@ export default function CallPage() {
   const [updatingReplies, setUpdatingReplies] = useState(false);
   const [clerkRefused, setClerkRefused] = useState(false);
   const [silentFor, setSilentFor] = useState(0);
+  const [lastSpokenSentence, setLastSpokenSentence] = useState("");
 
   if (!transportRef.current) {
     transportRef.current = new RoomTransport();
@@ -381,8 +382,8 @@ export default function CallPage() {
     ]
   );
   const alwaysPresent = useMemo(
-    () => alwaysPresentSuggestions(callLanguage),
-    [callLanguage, uiLanguage]
+    () => alwaysPresentSuggestions(callLanguage, lastSpokenSentence),
+    [callLanguage, uiLanguage, lastSpokenSentence]
   );
 
   function pushEntry(entry: TranscriptEntry) {
@@ -634,6 +635,7 @@ export default function CallPage() {
     // Claim before broadcasting so the clerk tab cannot steal playback on same machine.
     if (!tryClaimSpeech(msgId)) return;
 
+    setLastSpokenSentence(text);
     pushEntry({
       t: Date.now(),
       side: "us",

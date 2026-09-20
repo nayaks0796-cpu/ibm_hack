@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { formatDuration } from "@/lib/format";
 import { t } from "@/lib/i18n";
@@ -20,6 +21,8 @@ export default function OutcomeCard({
   outcome: Outcome;
   playbookTitle: string;
 }) {
+  const [copied, setCopied] = useState(false);
+
   const headline =
     outcome.referenceNumber ??
     outcome.capturedAnswer ??
@@ -29,10 +32,71 @@ export default function OutcomeCard({
     : t("outcome.answer");
   const resultLabel = t(RESULT_KEY[outcome.result]);
 
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(headline);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable (e.g. non-secure context) — silent fail
+    }
+  }
+
+  async function handleShare() {
+    const text = [
+      `Sampark call — ${playbookTitle}`,
+      `Result: ${resultLabel}`,
+      headline !== "—" ? `Reference / Answer: ${headline}` : null,
+      `Duration: ${formatDuration(outcome.startedAt, outcome.endedAt)}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "Sampark call outcome", text });
+        return;
+      } catch {
+        // user cancelled or share unavailable — fall through to copy
+      }
+    }
+    // Fallback: copy to clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // silent fail
+    }
+  }
+
   return (
     <div className="flex w-full flex-col gap-5 rounded-[1.75rem] border border-[var(--border)] bg-raised p-7 shadow-card">
-      <p className="eyebrow">{headlineLabel}</p>
-      <p className="font-serif text-5xl tracking-[-0.03em]">{headline}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="eyebrow">{headlineLabel}</p>
+          <p className="mt-1 font-serif text-5xl tracking-[-0.03em] break-all">{headline}</p>
+        </div>
+        {/* Copy + Share actions */}
+        <div className="flex shrink-0 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            title={t("outcome.copy")}
+            className="min-h-9 rounded-full border border-[var(--border)] bg-paper px-3 text-xs font-semibold transition-colors hover:border-signal hover:text-signal"
+          >
+            {copied ? t("outcome.copied") : t("outcome.copy")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleShare()}
+            title={t("outcome.share")}
+            className="min-h-9 rounded-full border border-[var(--border)] bg-paper px-3 text-xs font-semibold transition-colors hover:border-signal hover:text-signal"
+          >
+            {t("outcome.share")}
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-1">
         <MetaRow
