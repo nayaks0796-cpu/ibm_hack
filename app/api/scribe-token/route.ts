@@ -6,26 +6,22 @@ export async function POST() {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "ELEVENLABS_API_KEY not configured" },
+      { error: "ELEVENLABS_API_KEY not configured", kind: "auth" },
       { status: 500 }
     );
   }
 
-  const res = await fetch(
-    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  let res = await createRealtimeScribeToken(apiKey);
+  if (res.status === 429 || res.status >= 500) {
+    await sleep(800);
+    res = await createRealtimeScribeToken(apiKey);
+  }
 
   if (!res.ok) {
     const text = await res.text();
+    console.warn("[scribe-token]", res.status, text.slice(0, 300));
     return NextResponse.json(
-      { error: `ElevenLabs error: ${text}` },
+      { error: `ElevenLabs error: ${text}`, kind: tokenFailKind(res.status) },
       { status: res.status }
     );
   }
@@ -40,10 +36,36 @@ export async function POST() {
 
   if (!token) {
     return NextResponse.json(
-      { error: "ElevenLabs did not return a Scribe token" },
+      { error: "ElevenLabs did not return a Scribe token", kind: "error" },
       { status: 502 }
     );
   }
 
   return NextResponse.json({ token });
+}
+
+function createRealtimeScribeToken(apiKey: string): Promise<Response> {
+  return fetch(
+    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+function tokenFailKind(status: number): "quota" | "busy" | "auth" | "error" {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 402) return "quota";
+  if (status === 429 || status >= 500) return "busy";
+  return "error";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

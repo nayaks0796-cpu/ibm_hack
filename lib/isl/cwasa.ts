@@ -223,6 +223,9 @@ export function bootCwasa(): Promise<void> {
           avList: "avs",
           initAv: "anna",
           background: "#171716",
+          // Speed = 2^(initSpeed/rateSpeed). -5/5 → 0.5× so gloss is readable.
+          initSpeed: -5,
+          rateSpeed: 5,
           initSiGMLURL: "",
           allowSiGMLText: true,
           allowFrameSteps: false,
@@ -368,6 +371,7 @@ function installPlayHooks(): void {
 function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let sawLoading = false;
+    let sawLoaded = false;
     const timer = window.setTimeout(finish, timeoutMs);
     const waiter = (typ: string, msg?: string) => {
       if (
@@ -377,11 +381,20 @@ function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
         sawLoading = true;
         return;
       }
+      if (typ === "sigmlloaded") {
+        // Frames are ready — keep waiting until the avatar finishes signing.
+        sawLoaded = true;
+        return;
+      }
       const failed =
         typ === "status" &&
         /invalid|Cannot process|No valid|No signs|not loaded/i.test(msg || "");
-      if (typ === "sigmlloaded" || typ === "animidle" || failed) {
-        if (!sawLoading && typ === "animidle") return;
+      if (failed) {
+        finish();
+        return;
+      }
+      // Only settle on idle after this play actually started (ignore ambient idle).
+      if (typ === "animidle" && (sawLoading || sawLoaded)) {
         finish();
       }
     };
@@ -400,7 +413,8 @@ async function playSigmlNow(sigml: string): Promise<void> {
   installPlayHooks();
   resetStuckAnimgen();
 
-  const settled = waitUntilPlaySettled(12000);
+  // Half-speed signs need longer; multi-frame SiGML can exceed 12s.
+  const settled = waitUntilPlaySettled(30000);
   let started = false;
   try {
     const result = window.CWASA.playSiGMLText?.(sigml, 0) ?? "";
@@ -409,7 +423,7 @@ async function playSigmlNow(sigml: string): Promise<void> {
     started = false;
   }
   if (!started) {
-    notifyPlay("sigmlloaded");
+    notifyPlay("animidle");
     return;
   }
   await settled;

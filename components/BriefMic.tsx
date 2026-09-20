@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { t } from "@/lib/i18n";
 import { createScribeSTT, keytermsFromFacts } from "@/lib/elevenlabs/scribe";
+import {
+  classifyScribeFailure,
+  connectScribeSession,
+  markScribeReleased,
+  runExclusiveScribe,
+  scribeFailKey,
+  waitScribeCooldown,
+  type ScribeFailKind,
+} from "@/lib/elevenlabs/scribeConnect";
 import { RoomTransport } from "@/lib/transport/RoomTransport";
 import type { CallLanguage } from "@/lib/types";
 
@@ -49,14 +58,19 @@ export function useSpeakToText({
   const sessionRef = useRef(0);
   const listeningRef = useRef(false);
   const connectingRef = useRef(false);
+  const pendingReleaseRef = useRef(Promise.resolve());
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
+
+  function failCopy(kind: ScribeFailKind): string {
+    return t(scribeFailKey("start", kind));
+  }
 
   function release() {
     sessionRef.current += 1;
     unsubAudioRef.current?.();
     unsubAudioRef.current = null;
-    sttRef.current?.disconnect();
+    const disconnect = sttRef.current?.disconnect();
     sttRef.current = null;
     transportRef.current?.stopInbound();
     transportRef.current = null;
@@ -66,6 +80,9 @@ export function useSpeakToText({
     setConnecting(false);
     setPartial("");
     setSessionHasFinal(false);
+    pendingReleaseRef.current = Promise.resolve(disconnect).then(() => {
+      markScribeReleased();
+    });
   }
 
   const releaseRef = useRef(release);
@@ -84,75 +101,87 @@ export function useSpeakToText({
     setConnecting(true);
     const session = ++sessionRef.current;
 
-    const transport = new RoomTransport();
-    transportRef.current = transport;
-
-    try {
-      await transport.startInbound();
-    } catch {
-      if (session !== sessionRef.current) return;
-      transport.stopInbound();
-      transportRef.current = null;
-      connectingRef.current = false;
-      setConnecting(false);
-      setError(t("start.brief_mic_error"));
-      return;
-    }
-
-    if (session !== sessionRef.current) {
-      transport.stopInbound();
-      return;
-    }
-
-    const tokenRes = await fetch("/api/scribe-token", { method: "POST" });
-    let token: string | null = null;
-    if (tokenRes.ok) {
-      const data = (await tokenRes.json()) as { token?: string };
-      token = data.token ?? null;
-    }
-
+    await pendingReleaseRef.current;
     if (session !== sessionRef.current) return;
 
-    const controller = createScribeSTT(
-      callLanguage,
-      (text, isFinal) => {
-        if (session !== sessionRef.current) return;
-        const cleaned = text.trim();
-        if (!cleaned) return;
-        if (!isFinal) {
-          setPartial(cleaned);
-          return;
-        }
-        setPartial("");
-        setSessionHasFinal(true);
-        onTranscriptRef.current(cleaned);
-      },
-      keytermsFromFacts(name, facts),
-      () => {
-        if (session !== sessionRef.current) return;
-        release();
-        setError(t("start.brief_captions_error"));
-      }
-    );
-    sttRef.current = controller;
-    unsubAudioRef.current = transport.onInboundAudio((chunk) => {
-      controller.sendAudio(chunk);
-    });
+    await runExclusiveScribe(async () => {
+      if (session !== sessionRef.current) return;
+      await waitScribeCooldown();
+      if (session !== sessionRef.current) return;
 
-    try {
-      await controller.connect(token);
+      const transport = new RoomTransport();
+      transportRef.current = transport;
+
+      try {
+        await transport.startInbound();
+      } catch {
+        if (session !== sessionRef.current) return;
+        transport.stopInbound();
+        transportRef.current = null;
+        connectingRef.current = false;
+        setConnecting(false);
+        setError(t("start.brief_mic_error"));
+        return;
+      }
+
       if (session !== sessionRef.current) {
-        controller.disconnect();
+        if (transportRef.current === transport) {
+          transport.stopInbound();
+          transportRef.current = null;
+        }
+        return;
+      }
+
+      const controller = createScribeSTT(
+        callLanguage,
+        (text, isFinal) => {
+          if (session !== sessionRef.current) return;
+          const cleaned = text.trim();
+          if (!cleaned) return;
+          if (!isFinal) {
+            setPartial(cleaned);
+            return;
+          }
+          setPartial("");
+          setSessionHasFinal(true);
+          onTranscriptRef.current(cleaned);
+        },
+        keytermsFromFacts(name, facts),
+        (error) => {
+          if (session !== sessionRef.current) return;
+          release();
+          setError(failCopy(classifyScribeFailure({ message: error.message })));
+        }
+      );
+      sttRef.current = controller;
+      unsubAudioRef.current = transport.onInboundAudio((chunk) => {
+        controller.sendAudio(chunk);
+      });
+
+      const result = await connectScribeSession(controller, {
+        isCurrent: () => session === sessionRef.current,
+      });
+      if (session !== sessionRef.current) {
+        if (sttRef.current === controller) {
+          void controller.disconnect();
+          sttRef.current = null;
+        }
+        return;
+      }
+      if (!result.ok) {
+        release();
+        if (result.kind !== "cancelled") setError(failCopy(result.kind));
         return;
       }
       connectingRef.current = false;
       listeningRef.current = true;
       setConnecting(false);
       setListening(true);
-    } catch {
-      if (session !== sessionRef.current) return;
-      release();
-      setError(t("start.brief_captions_error"));
+    });
+
+    if (session === sessionRef.current && !listeningRef.current) {
+      connectingRef.current = false;
+      setConnecting(false);
     }
   }
 

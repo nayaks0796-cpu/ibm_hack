@@ -40,7 +40,7 @@ export class ScribeClient {
     onCaption: ScribeCallback,
     options: ScribeConnectOptions = {}
   ): Promise<void> {
-    this.disconnect();
+    await this.disconnect();
     this.onError = options.onError ?? null;
 
     const language = options.language === "en" ? "en" : "hi";
@@ -157,21 +157,43 @@ export class ScribeClient {
     send(chunk);
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     this.onError = null;
-    if (this.ws) {
-      this.ws.onopen = null;
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      if (
-        this.ws.readyState === WebSocket.OPEN ||
-        this.ws.readyState === WebSocket.CONNECTING
-      ) {
-        this.ws.close();
-      }
-    }
+    const ws = this.ws;
     this.ws = null;
+    if (!ws) return;
+    if (ws.readyState === WebSocket.CLOSED) return;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timer = setTimeout(finish, 1200);
+      ws.onopen = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.onclose = () => {
+        clearTimeout(timer);
+        finish();
+      };
+      try {
+        if (
+          ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING
+        ) {
+          ws.close();
+        } else {
+          clearTimeout(timer);
+          finish();
+        }
+      } catch {
+        clearTimeout(timer);
+        finish();
+      }
+    });
   }
 }
 

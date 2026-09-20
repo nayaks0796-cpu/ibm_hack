@@ -15,6 +15,15 @@ import SilentClerkBanner from "@/components/SilentClerkBanner";
 import UnmuteButton from "@/components/UnmuteButton";
 import { answerPreview, looksLikeGoalAnswer } from "@/lib/guard/answer";
 import { createScribeSTT, keytermsFromFacts } from "@/lib/elevenlabs/scribe";
+import {
+  classifyScribeFailure,
+  connectScribeSession,
+  markScribeReleased,
+  runExclusiveScribe,
+  scribeFailKey,
+  waitScribeCooldown,
+  type ScribeFailKind,
+} from "@/lib/elevenlabs/scribeConnect";
 import { containsSensitiveCode } from "@/lib/guard/otp";
 import { redact } from "@/lib/guard/redact";
 import {
@@ -136,6 +145,7 @@ export default function CallPage() {
   const [demoVoice, setDemoVoice] = useState(false);
   const [liveCaptions, setLiveCaptions] = useState(false);
   const [captionsFailed, setCaptionsFailed] = useState(false);
+  const [captionsFailKind, setCaptionsFailKind] = useState<ScribeFailKind>("error");
   const [micNeeded, setMicNeeded] = useState(false);
   const [livePartial, setLivePartial] = useState("");
   const [updatingReplies, setUpdatingReplies] = useState(false);
@@ -161,21 +171,16 @@ export default function CallPage() {
       return;
     }
 
-    const tokenRes = await fetch("/api/scribe-token", { method: "POST" });
-    let token: string | null = null;
-    if (tokenRes.ok) {
-      const data = (await tokenRes.json()) as { token?: string };
-      token = data.token ?? null;
-    }
-
-    const dropScribe = () => {
+    const dropScribe = (kind: ScribeFailKind = "error") => {
       unsubAudioRef.current?.();
       unsubAudioRef.current = null;
-      sttRef.current?.disconnect();
+      const disconnect = sttRef.current?.disconnect();
       sttRef.current = null;
       setLiveCaptions(false);
       setLivePartial("");
+      setCaptionsFailKind(kind);
       setCaptionsFailed(true);
+      void Promise.resolve(disconnect).then(() => markScribeReleased());
     };
 
     const profile = loadProfile();
@@ -196,22 +201,24 @@ export default function CallPage() {
         session?.facts ?? {},
         playbookKeyterms(getPlaybook(session?.playbookId ?? ""))
       ),
-      () => dropScribe()
+      (error) => dropScribe(classifyScribeFailure({ message: error.message }))
     );
     sttRef.current = controller;
     unsubAudioRef.current = transport.onInboundAudio((chunk) => {
       controller.sendAudio(chunk);
     });
 
-    try {
-      await controller.connect(token);
+    const result = await runExclusiveScribe(async () => {
+      await waitScribeCooldown();
+      return connectScribeSession(controller);
+    });
+    if (!result.ok) {
+      dropScribe(result.kind === "cancelled" ? "busy" : result.kind);
+    } else {
       setLiveCaptions(true);
       setCaptionsFailed(false);
-    } catch {
-      dropScribe();
-    } finally {
-      connectingRef.current = false;
     }
+    connectingRef.current = false;
   }
 
   useEffect(() => {
@@ -1028,7 +1035,7 @@ export default function CallPage() {
 
       {captionsFailed && !micNeeded ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-raised px-4 py-3">
-          <p className="text-sm text-[var(--muted)]">{t("call.captions_failed")}</p>
+          <p className="text-sm text-[var(--muted)]">{t(scribeFailKey("call", captionsFailKind))}</p>
           <button
             type="button"
             onClick={() => void bootLiveCaptions()}
