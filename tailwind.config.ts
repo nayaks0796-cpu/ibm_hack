@@ -5,12 +5,16 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Use the OS-level prefers-color-scheme signal — no JS toggle needed.
+  darkMode: "media",
   theme: {
     extend: {
       colors: {
-        paper: "#f7f6f3",
-        ink: "#171716",
-        raised: "#fffefc",
+        // These map to CSS custom properties so they flip automatically in dark mode.
+        paper: "var(--color-paper)",
+        ink: "var(--color-ink)",
+        raised: "var(--color-raised)",
+        card: "var(--color-card)",
         signal: "#0e7c72",
         highlight: "#f2b705",
         "highlight-ink": "#8a5a00",

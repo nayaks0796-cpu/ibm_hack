@@ -3,12 +3,20 @@ html,
 body {
   min-height: 100%;
   margin: 0;
+  color-scheme: light dark;
 }
 
 body {
   background: #f7f6f3;
   color: #171716;
   font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111110;
+    color: #edecea;
+  }
 }
 
 button,
