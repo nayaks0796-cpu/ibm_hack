@@ -60,7 +60,7 @@ export default function StartPage() {
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
   const [facts, setFacts] = useState<Record<string, string>>({});
-  const [category, setCategory] = useState<PlaybookCategory | null>(null);
+  const [expandedCategory, setExpandedCategory] = useState<PlaybookCategory | null>(null);
   const [playbookId, setPlaybookId] = useState("power-cut");
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("en");
   const [callLanguage, setCallLanguage] = useState<CallLanguage>("en");
@@ -137,7 +137,8 @@ export default function StartPage() {
 
   const playbook: Playbook =
     getPlaybook(playbookId) ?? getPlaybook("power-cut") ?? playbooksInCategory("utility")[0];
-  const listed = category ? playbooksInCategory(category) : [];
+  // Which category contains the currently selected playbook (auto-expanded on load)
+  const selectedCategory = playbook.category ?? "utility";
 
   function selectPlaybook(id: string) {
     const next = getPlaybook(id);
@@ -255,63 +256,55 @@ export default function StartPage() {
           <span className="text-sm font-semibold">{sosBusy ? "…" : "112"}</span>
         </button>
 
-        {!category ? (
-          <>
-            <p className="mt-10 eyebrow">{t("start.choose_category")}</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {PLAYBOOK_CATEGORIES.map((id) => (
+        {/* All categories + their playbooks in one list — one tap to select */}
+        <div className="mt-8 flex flex-col gap-2">
+          {PLAYBOOK_CATEGORIES.filter((id) => id !== "emergency").map((id) => {
+            const isExpanded = (expandedCategory ?? selectedCategory) === id;
+            const items = playbooksInCategory(id);
+            return (
+              <div
+                key={id}
+                className={`overflow-hidden rounded-[1.25rem] border transition-colors ${
+                  isExpanded ? "border-[var(--border)] bg-raised" : "border-transparent bg-paper hover:border-[var(--border)]"
+                }`}
+              >
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    setCategory(id);
-                    const first = playbooksInCategory(id)[0];
-                    if (first) selectPlaybook(first.id);
+                    const next = isExpanded ? null : id;
+                    setExpandedCategory(next);
+                    if (next) {
+                      const first = items[0];
+                      if (first && first.id !== playbookId) selectPlaybook(first.id);
+                    }
                   }}
-                  className="choice h-full p-5 text-left"
+                  className="flex w-full items-center justify-between px-5 py-4 text-left"
                 >
-                  <span className="block font-serif text-2xl">{t(CATEGORY_KEY[id])}</span>
+                  <span className="font-serif text-xl">{t(CATEGORY_KEY[id])}</span>
+                  <span className={`text-[var(--muted)] transition-transform duration-200 select-none ${isExpanded ? "rotate-90" : ""}`}>›</span>
                 </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="mt-10 flex items-center justify-between">
-              <p className="eyebrow">{t(CATEGORY_KEY[category])}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  stopSpeak();
-                  setCategory(null);
-                }}
-                className="text-sm font-semibold text-signal"
-              >
-                {t("start.back_to_categories")}
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {listed.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => selectPlaybook(item.id)}
-                  className={`choice h-full p-5 text-left ${
-                    playbookId === item.id ? "choice-on" : ""
-                  }`}
-                >
-                  <span className="block font-serif text-2xl">{playbookTitle(item, uiLanguage)}</span>
-                  <span className="mt-2 block text-sm font-normal text-[var(--muted)]">
-                    {playbookGoal(item, uiLanguage)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+                {isExpanded && (
+                  <div className="grid gap-2 px-3 pb-3 sm:grid-cols-3">
+                    {items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectPlaybook(item.id)}
+                        className={`choice h-full p-4 text-left ${playbookId === item.id ? "choice-on" : ""}`}
+                      >
+                        <span className="block font-serif text-lg leading-tight">{playbookTitle(item, uiLanguage)}</span>
+                        <span className="mt-1.5 block text-xs font-normal text-[var(--muted)]">{playbookGoal(item, uiLanguage)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-        {category ? (
-          <>
+        {/* Facts + ISL + Call button — always visible below the category list */}
+        <>
             <section className="mt-8">
               <h2 className="eyebrow">{t("start.isl_avatar")}</h2>
               <p className="mt-2 text-sm text-[var(--muted)]">{t("start.isl_hint")}</p>
@@ -422,11 +415,10 @@ export default function StartPage() {
 
             <div className="mt-10 flex justify-end">
               <button type="button" onClick={() => void startCall()} className="gold-btn min-h-16 px-12 text-xl">
-                {playbook.emergency ? t("start.sos") : t("start.call_button")}
+                {t("start.call_button")}
               </button>
             </div>
-          </>
-        ) : null}
+        </>
       </main>
     </AppChrome>
   );

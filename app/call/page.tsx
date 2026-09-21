@@ -867,8 +867,8 @@ export default function CallPage() {
 
   return (
     <main
-      key={`${uiLanguage}-${callLanguage}`}
       className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-5 sm:px-6"
+      style={{ paddingBottom: "var(--send-bar-h, 0px)" }}
     >
       <header className="animate-fade-up rounded-2xl border border-[var(--border)] bg-card/90 px-4 py-3 shadow-sm backdrop-blur-sm">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -1180,8 +1180,28 @@ export default function CallPage() {
         </form>
       </details>
 
-      {/* Response Station — Send alone speaks */}
-      <div className="mt-4 rounded-[1.75rem] border border-[var(--border)] bg-raised p-4 shadow-card">
+      {/* Response Station — sticky on mobile, inline on desktop */}
+      <div
+        className="
+          mt-4
+          md:static md:rounded-[1.75rem] md:border md:border-[var(--border)] md:bg-raised md:shadow-card md:p-4
+          fixed bottom-0 left-0 right-0 z-30
+          border-t border-[var(--border)] bg-raised/95 backdrop-blur-md px-4 pt-3 pb-[max(env(safe-area-inset-bottom),12px)]
+          md:backdrop-blur-none md:border-t-0 md:pb-4 md:pt-4
+        "
+        style={{ "--send-bar-h": "0px" } as React.CSSProperties}
+        ref={(el) => {
+          if (!el) return;
+          const ro = new ResizeObserver(() => {
+            const h = el.getBoundingClientRect().height;
+            (el.closest("main") as HTMLElement | null)?.style.setProperty(
+              "--send-bar-h",
+              `${h}px`
+            );
+          });
+          ro.observe(el);
+        }}
+      >
         {/* Missing-fact intervention alert */}
         {needsIntervention && (
           <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
@@ -1360,18 +1380,19 @@ export default function CallPage() {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setShowKeypad((value) => !value)}
-        className="mt-3 min-h-12 text-sm font-semibold text-signal"
-      >
-        {showKeypad || channel === "phone-ivr" ? t("call.hide_keypad") : t("call.keypad")}
-      </button>
+      {/* DTMF keypad — rendered above the sticky bar on mobile */}
       {showKeypad || channel === "phone-ivr" ? (
-        <div className="mt-2 pb-4">
+        <div className="mb-2 pb-2 md:mt-4 md:mb-0 md:pb-4">
           <DTMFPad onKey={handleDtmf} />
         </div>
       ) : null}
+      <button
+        type="button"
+        onClick={() => setShowKeypad((value) => !value)}
+        className="mb-2 min-h-10 text-sm font-semibold text-signal md:mt-3 md:mb-0"
+      >
+        {showKeypad || channel === "phone-ivr" ? t("call.hide_keypad") : t("call.keypad")}
+      </button>
     </main>
   );
 }

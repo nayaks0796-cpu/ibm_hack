@@ -16,17 +16,6 @@ interface Props {
   visible?: boolean;
 }
 
-const SAMPLE_SIGNS = [
-  { label: "Hello", word: "HELLO" },
-  { label: "Help", word: "HELP" },
-  { label: "Power", word: "POWER" },
-  { label: "Thank you", word: "THANKYOU" },
-  { label: "Number", word: "NUMBER" },
-  { label: "Hospital", word: "HOSPITAL" },
-  { label: "Please", word: "PLEASE" },
-  { label: "Problem", word: "PROBLEM" },
-];
-
 export default function ISLAvatar({ gloss = [], visible = true }: Props) {
   const slotRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -34,9 +23,10 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [sequence, setSequence] = useState<string[]>([]);
   const seqIdRef = useRef(0);
-  // Last sign shown, tracked outside React state so the visibility effect can
-  // replay it without stale closures.
+  // Refs that mirror state so effects and callbacks avoid stale closures.
   const activeWordRef = useRef("HELLO");
+  // Tracks whether a sequence is actively signing (null = idle).
+  const activeIndexRef = useRef<number | null>(null);
 
   // Boot once on mount. Do not tear down WebGL when the user toggles ISL —
   // the call page parks this panel off-screen instead of unmounting.
@@ -84,8 +74,8 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
   // When ISL is turned back on, the WebGL drawing buffer has been cleared while
   // the panel was parked off-screen, so the idle avatar shows as a blank canvas.
-  // Re-attach the host, force a layout pass, and REPLAY the current sign — a real
-  // Animgen play is the only thing that repaints the WebGL buffer.
+  // Re-attach the host, force a layout pass, and replay the last sign.
+  // We do NOT replay if a sequence is already in flight (activeIndex !== null).
   useEffect(() => {
     if (!visible) return;
     const slot = slotRef.current;
@@ -97,10 +87,12 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     const repaint = () => {
       if (cancelled) return;
       refreshCwasaLayout();
-      if (avatarCanvasReady()) {
-        if (status !== "ready") setStatus("ready");
-        void playSignWord(activeWordRef.current || "HELLO");
-      }
+      if (!avatarCanvasReady()) return;
+      if (status !== "ready") setStatus("ready");
+      // Only replay if nothing is currently signing — we don't want to
+      // interrupt an active sequence that survived the visibility toggle.
+      if (activeIndexRef.current !== null) return;
+      void playSignWord(activeWordRef.current || "HELLO");
     };
 
     // Retry a few times: boot may still be finishing when the panel returns.
@@ -115,7 +107,9 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // Sequential multi-sign animator — wait for each sign so Animgen is not overlapped.
+  // Sequential multi-sign animator — waits for each sign to finish before
+  // starting the next. Checks seqIdRef after every await so a newer gloss
+  // can cancel the loop without leaving Animgen in a half-played state.
   async function playSequence(words: string[], seqId: number) {
     const targetWords = words.map((w) => w.trim()).filter(Boolean);
     if (targetWords.length === 0) return;
@@ -123,15 +117,22 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     setSequence(targetWords);
 
     for (let i = 0; i < targetWords.length; i += 1) {
+      // Check before starting each word — a new gloss may have arrived.
       if (seqIdRef.current !== seqId) return;
       const w = targetWords[i].toUpperCase();
       setActiveWord(w);
       activeWordRef.current = w;
+      activeIndexRef.current = i;
       setActiveIndex(i);
       await playSignWord(w);
+      // Check again after the await — seqId may have changed while signing.
+      if (seqIdRef.current !== seqId) return;
     }
 
-    if (seqIdRef.current === seqId) setActiveIndex(null);
+    if (seqIdRef.current === seqId) {
+      activeIndexRef.current = null;
+      setActiveIndex(null);
+    }
   }
 
   useEffect(() => {
@@ -152,23 +153,27 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
     };
   }, [gloss, status]);
 
-  function playSingle(word: string, index?: number) {
+  function playSingle(word: string, index?: number, fromChip = false) {
     const seqId = seqIdRef.current + 1;
     seqIdRef.current = seqId;
     const upper = word.toUpperCase();
     setActiveWord(upper);
     activeWordRef.current = upper;
+    activeIndexRef.current = index ?? null;
     setActiveIndex(index ?? null);
     void playSignWord(upper);
   }
 
   const isReady = status === "ready" || avatarCanvasReady();
 
+  // Words shown as tappable chips when a multi-word gloss is signing
+  const showWordChips = sequence.length > 1;
+
   return (
     <div
       className="relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-lg"
     >
-      {/* Avatar Viewport (Enlarged for clear visibility) */}
+      {/* Avatar Viewport */}
       <div className="relative h-[340px] sm:h-[380px] md:h-[420px] w-full overflow-hidden bg-[#0c0e12] flex items-center justify-center">
         <div ref={slotRef} className="h-full w-full flex items-center justify-center [&>div]:!h-full [&>div]:!w-full [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:!object-contain" />
 
@@ -192,83 +197,64 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
                     else setStatus("error");
                   });
               }}
-              className="ml-2 rounded bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/30"
+              className="ml-2 rounded bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-paper/80 hover:bg-white/20"
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* Current Active Sign Overlay */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-center justify-between">
-          <span className="rounded-md bg-black/60 backdrop-blur-sm px-2.5 py-1 text-xs font-bold uppercase tracking-[0.14em] text-amber-300 border border-amber-400/30">
-            {activeWord ? `Sign: ${activeWord}` : "ISL Avatar"}
-          </span>
-
-          {sequence.length > 1 && activeIndex !== null && (
-            <span className="rounded-md bg-black/60 px-2 py-0.5 text-[10px] text-paper/80">
+        {/* "Signing: WORD" subtitle — clean, user-facing */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between px-3 pb-3">
+          {activeWord && isReady ? (
+            <span className="rounded-md bg-black/55 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-paper/90">
+              Signing: {activeWord}
+            </span>
+          ) : (
+            <span />
+          )}
+          {showWordChips && activeIndex !== null && (
+            <span className="rounded-md bg-black/55 px-2 py-0.5 text-[10px] text-paper/70">
               {activeIndex + 1} / {sequence.length}
             </span>
           )}
         </div>
       </div>
 
-      {/* Interactive Sign Sequence & Quick Controls */}
-      <div className="border-t border-white/10 bg-[#121417] p-2.5 space-y-2">
-        {/* Active sentence sign chips */}
-        {sequence.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mr-1">
-              Sentence Signs:
-            </span>
-            {sequence.map((w, idx) => (
-              <button
-                key={`${w}-${idx}`}
-                type="button"
-                onClick={() => playSingle(w, idx)}
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all ${
-                  activeIndex === idx
-                    ? "bg-amber-400 text-black shadow-sm scale-105"
-                    : "bg-white/10 text-paper hover:bg-white/20 border border-white/10"
-                }`}
-                title={`Click to replay sign: ${w}`}
-              >
-                {w}
-              </button>
-            ))}
-
-            {sequence.length > 1 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const seqId = seqIdRef.current + 1;
-                  seqIdRef.current = seqId;
-                  void playSequence(sequence, seqId);
-                }}
-                className="rounded-full bg-teal-500/20 border border-teal-400/30 px-2 py-0.5 text-[10px] text-teal-300 hover:bg-teal-500/30 ml-auto"
-                title="Replay all signs in sequence"
-              >
-                🔄 Replay All
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Quick Demo Signs */}
-        <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-white/5">
-          <span className="text-[10px] font-medium text-slate-500 mr-1">Demo Signs:</span>
-          {SAMPLE_SIGNS.map((s) => (
+      {/* Word chips — only shown during multi-word sequences so users can replay individual signs */}
+      {showWordChips && (
+        <div className="border-t border-white/10 bg-[#121417] px-3 py-2 flex flex-wrap items-center gap-1.5">
+          {sequence.map((w, idx) => (
             <button
-              key={s.word}
+              key={`${w}-${idx}`}
               type="button"
-              onClick={() => playSingle(s.word)}
-              className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-teal-500/20 hover:text-teal-300 transition-colors"
+              onClick={() => playSingle(w, idx, true)}
+              aria-label={`Replay sign: ${w}`}
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
+                activeIndex === idx
+                  ? "bg-[var(--signal)] text-white shadow-sm scale-105"
+                  : "bg-white/10 text-paper/80 hover:bg-white/20 border border-white/10"
+              }`}
             >
-              {s.label}
+              {w}
             </button>
           ))}
+          {sequence.length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                const seqId = seqIdRef.current + 1;
+                seqIdRef.current = seqId;
+                void playSequence(sequence, seqId);
+              }}
+              aria-label="Replay all signs"
+              className="ml-auto rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] text-paper/60 hover:bg-white/10 transition-colors"
+            >
+              ↺ Replay
+            </button>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

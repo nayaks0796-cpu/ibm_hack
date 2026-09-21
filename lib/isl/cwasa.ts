@@ -202,6 +202,13 @@ export function avatarCanvasReady(): boolean {
   return Boolean(document.querySelector("#sampark-cwasa-host canvas, .CWASAAvatar.av0 canvas"));
 }
 
+// Avatar speed: 2^(initSpeed/rateSpeed).
+// -5/5 = 2^(-1) = 0.5× → signs play at half speed so every gesture completes visibly.
+const AVATAR_SPEED_SETTINGS = {
+  initSpeed: -5,
+  rateSpeed: 5,
+} as const;
+
 export function bootCwasa(): Promise<void> {
   if (bootPromise) return bootPromise;
 
@@ -211,30 +218,27 @@ export function bootCwasa(): Promise<void> {
     await Promise.all([loadScript(), loadSignIndex()]);
     if (!window.CWASA) throw new Error("CWASA missing after script load");
 
-    await waitFor(".CWASAAvatar.av0", 4000);
-
-    if (!avatarCanvasReady()) {
-      const ready = window.CWASA.init({
-        jasBase: JAS_BASE,
-        useCwaConfig: true,
-        avSettings: {
-          width: 320,
-          height: 280,
-          avList: "avs",
-          initAv: "anna",
-          background: "#171716",
-          // Speed = 2^(initSpeed/rateSpeed). -5/5 → 0.5× so gloss is readable.
-          initSpeed: -5,
-          rateSpeed: 5,
-          initSiGMLURL: "",
-          allowSiGMLText: true,
-          allowFrameSteps: false,
-          ambIdle: true,
-        },
-      });
-      if (ready && typeof (ready as Promise<void>).then === "function") {
-        await ready;
-      }
+    // Always call CWASA.init so speed settings are applied — skipping init when
+    // the canvas already exists (e.g. hot-reload or cached state) is what causes
+    // the avatar to run at the default (full) speed.
+    const ready = window.CWASA.init({
+      jasBase: JAS_BASE,
+      useCwaConfig: true,
+      avSettings: {
+        width: 320,
+        height: 280,
+        avList: "avs",
+        initAv: "anna",
+        background: "#171716",
+        ...AVATAR_SPEED_SETTINGS,
+        initSiGMLURL: "",
+        allowSiGMLText: true,
+        allowFrameSteps: false,
+        ambIdle: true,
+      },
+    });
+    if (ready && typeof (ready as Promise<void>).then === "function") {
+      await ready;
     } else if (window.CWASA.ready) {
       await window.CWASA.ready;
     }
@@ -372,6 +376,13 @@ function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let sawLoading = false;
     let sawLoaded = false;
+    // Minimum wall-clock time we must wait before accepting an animidle.
+    // Animgen fires a residual "animidle" on init and between fast sequential
+    // plays — guarding with a floor of 400 ms prevents these ambient idles
+    // from resolving the waiter before the sign has actually played.
+    const startedAt = Date.now();
+    const MIN_PLAY_MS = 400;
+
     const timer = window.setTimeout(finish, timeoutMs);
     const waiter = (typ: string, msg?: string) => {
       if (
@@ -382,7 +393,7 @@ function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
         return;
       }
       if (typ === "sigmlloaded") {
-        // Frames are ready — keep waiting until the avatar finishes signing.
+        // Frames are compiled — keep waiting until the avatar finishes signing.
         sawLoaded = true;
         return;
       }
@@ -393,9 +404,16 @@ function waitUntilPlaySettled(timeoutMs: number): Promise<void> {
         finish();
         return;
       }
-      // Only settle on idle after this play actually started (ignore ambient idle).
+      // Settle on idle only after this play actually started AND the minimum
+      // guard time has elapsed (suppresses ambient idle from previous sign).
       if (typ === "animidle" && (sawLoading || sawLoaded)) {
-        finish();
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= MIN_PLAY_MS) {
+          finish();
+        } else {
+          // Reschedule: wait the remaining guard time then resolve.
+          window.setTimeout(finish, MIN_PLAY_MS - elapsed);
+        }
       }
     };
     function finish() {
