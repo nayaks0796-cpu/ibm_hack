@@ -211,6 +211,7 @@
     "outcome.copy":  "कॉपी",
     "outcome.copied":  "कॉपी हो गया!",
     "outcome.share":  "शेयर",
+    "outcome.share_family":  "परिवार को भेजें",
     "outcome.share_text":  "Sampark कॉल — {playbook} · {result} · {ref}",
     "call.repeat_last":  "पिछला दोहराएँ",
     "start.missing_facts_warning":  "अनुपलब्ध: {fields}। क्लर्क इन्हें पूछ सकते हैं। फिर भी जारी रखें?",

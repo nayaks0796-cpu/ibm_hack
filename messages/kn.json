@@ -211,6 +211,7 @@
     "outcome.copy":  "Copy",
     "outcome.copied":  "Copied!",
     "outcome.share":  "Share",
+    "outcome.share_family":  "ಕುಟುಂಬಕ್ಕೆ ಕಳುಹಿಸು",
     "outcome.share_text":  "Sampark call — {playbook} · {result} · {ref}",
     "call.repeat_last":  "Repeat last",
     "start.missing_facts_warning":  "Missing: {fields}. The clerk may ask for these. Continue anyway?",

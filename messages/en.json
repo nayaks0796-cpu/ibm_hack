@@ -213,6 +213,7 @@
     "outcome.copy":  "Copy",
     "outcome.copied":  "Copied!",
     "outcome.share":  "Share",
+    "outcome.share_family":  "Share with family",
     "outcome.share_text":  "Sampark call — {playbook} · {result} · {ref}",
     "history.title":  "Call history",
     "history.empty":  "No calls yet. Make your first call.",

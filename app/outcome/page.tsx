@@ -21,6 +21,7 @@ export default function OutcomePage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [ready, setReady] = useState(false);
   const [factsSaved, setFactsSaved] = useState(false);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     applyUiLanguage(loadProfile().uiLanguage);
@@ -37,6 +38,39 @@ export default function OutcomePage() {
     if (!outcome?.facts) return;
     mergeSavedFacts(outcome.facts);
     setFactsSaved(true);
+  }
+
+  async function shareWithFamily() {
+    if (!outcome) return;
+    const playbook = getPlaybook(outcome.playbookId);
+    const title = playbook ? playbookTitle(playbook, getUiLanguage()) : outcome.playbookId;
+    const resultLabel = t(`outcome.result.${outcome.result}` as Parameters<typeof t>[0]);
+    const ref = outcome.referenceNumber ?? outcome.capturedAnswer ?? null;
+    const lines = [
+      `Sampark — ${title}`,
+      `${t("outcome.result_label")}: ${resultLabel}`,
+      ref ? `${t(outcome.referenceNumber ? "outcome.reference" : "outcome.answer")}: ${ref}` : null,
+      `${t("outcome.duration")}: ${new Date(outcome.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+    ].filter(Boolean).join("\n");
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: `Sampark — ${title}`, text: lines });
+        setShared(true);
+        setTimeout(() => setShared(false), 3000);
+        return;
+      } catch {
+        // cancelled or unavailable — fall through
+      }
+    }
+    // Fallback: copy to clipboard
+    try {
+      await navigator.clipboard.writeText(lines);
+      setShared(true);
+      setTimeout(() => setShared(false), 3000);
+    } catch {
+      // silent fail
+    }
   }
 
   if (!ready) {
@@ -121,7 +155,17 @@ export default function OutcomePage() {
           <p className="mt-8 text-base text-[var(--muted)]">{t("outcome.no_outcome")}</p>
         )}
 
-        <button type="button" onClick={newCall} className="gold-btn mt-10 min-h-14 w-full max-w-md text-lg">
+        {outcome ? (
+          <button
+            type="button"
+            onClick={() => void shareWithFamily()}
+            className="ghost-btn mt-6 min-h-14 w-full max-w-md text-base"
+          >
+            {shared ? t("outcome.copied") : t("outcome.share_family")}
+          </button>
+        ) : null}
+
+        <button type="button" onClick={newCall} className="gold-btn mt-4 min-h-14 w-full max-w-md text-lg">
           {t("outcome.new_call")}
         </button>
       </main>
