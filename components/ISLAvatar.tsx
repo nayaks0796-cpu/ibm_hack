@@ -171,20 +171,20 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
   return (
     <div
-      className="relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] bg-ink text-paper/80 shadow-lg"
+      className="relative flex flex-col w-full overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0c0e12] text-white shadow-lg"
     >
       {/* Avatar Viewport */}
       <div className="relative h-[340px] sm:h-[380px] md:h-[420px] w-full overflow-hidden bg-[#0c0e12] flex items-center justify-center">
         <div ref={slotRef} className="h-full w-full flex items-center justify-center [&>div]:!h-full [&>div]:!w-full [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:!object-contain" />
 
         {status === "loading" && !isReady && (
-          <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-paper/70">
+          <p className="pointer-events-none absolute inset-x-3 top-3 text-xs font-semibold uppercase tracking-[0.14em] text-white/85">
             {t("call.isl_loading")}
           </p>
         )}
 
         {status === "error" && !isReady && (
-          <div className="absolute inset-x-3 top-3 flex items-center justify-between rounded-lg bg-black/80 px-3 py-2 text-xs text-paper/90 border border-white/10">
+          <div className="absolute inset-x-3 top-3 flex items-center justify-between rounded-lg bg-black/80 px-3 py-2 text-xs text-white border border-white/15">
             <p>{t("call.isl_error")}</p>
             <button
               type="button"
@@ -197,7 +197,7 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
                     else setStatus("error");
                   });
               }}
-              className="ml-2 rounded bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-paper/80 hover:bg-white/20"
+              className="ml-2 rounded bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/25"
             >
               Retry
             </button>
@@ -207,14 +207,14 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
         {/* "Signing: WORD" subtitle — clean, user-facing */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between px-3 pb-3">
           {activeWord && isReady ? (
-            <span className="rounded-md bg-black/55 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-paper/90">
+            <span className="rounded-md bg-black/75 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-white">
               Signing: {activeWord}
             </span>
           ) : (
             <span />
           )}
           {showWordChips && activeIndex !== null && (
-            <span className="rounded-md bg-black/55 px-2 py-0.5 text-[10px] text-paper/70">
+            <span className="rounded-md bg-black/75 px-2 py-0.5 text-[10px] font-semibold text-white">
               {activeIndex + 1} / {sequence.length}
             </span>
           )}
@@ -223,17 +223,17 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
 
       {/* Word chips — only shown during multi-word sequences so users can replay individual signs */}
       {showWordChips && (
-        <div className="border-t border-white/10 bg-[#121417] px-3 py-2 flex flex-wrap items-center gap-1.5">
+        <div className="border-t border-white/15 bg-[#1c212b] px-3 py-2.5 flex flex-wrap items-center gap-1.5">
           {sequence.map((w, idx) => (
             <button
               key={`${w}-${idx}`}
               type="button"
               onClick={() => playSingle(w, idx, true)}
               aria-label={`Replay sign: ${w}`}
-              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-all ${
                 activeIndex === idx
                   ? "bg-[var(--signal)] text-white shadow-sm scale-105"
-                  : "bg-white/10 text-paper/80 hover:bg-white/20 border border-white/10"
+                  : "bg-white/20 text-white border border-white/40 hover:bg-white/30"
               }`}
             >
               {w}
@@ -248,7 +248,7 @@ export default function ISLAvatar({ gloss = [], visible = true }: Props) {
                 void playSequence(sequence, seqId);
               }}
               aria-label="Replay all signs"
-              className="ml-auto rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] text-paper/60 hover:bg-white/10 transition-colors"
+              className="ml-auto rounded-full border border-white/40 bg-white/15 px-3 py-1 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
             >
               ↺ Replay
             </button>

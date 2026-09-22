@@ -203,9 +203,10 @@ export function avatarCanvasReady(): boolean {
 }
 
 // Avatar speed: 2^(initSpeed/rateSpeed).
-// -5/5 = 2^(-1) = 0.5× → signs play at half speed so every gesture completes visibly.
+// -2/5 = 2^(-0.4) ≈ 0.76× — a step up from the previous half-speed setting,
+// still under full speed so each gesture stays readable.
 const AVATAR_SPEED_SETTINGS = {
-  initSpeed: -5,
+  initSpeed: -2,
   rateSpeed: 5,
 } as const;
 
@@ -431,7 +432,7 @@ async function playSigmlNow(sigml: string): Promise<void> {
   installPlayHooks();
   resetStuckAnimgen();
 
-  // Half-speed signs need longer; multi-frame SiGML can exceed 12s.
+  // Signs run a little under realtime; multi-frame SiGML can exceed 12s.
   const settled = waitUntilPlaySettled(30000);
   let started = false;
   try {
