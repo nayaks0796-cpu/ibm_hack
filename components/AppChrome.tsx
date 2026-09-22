@@ -12,7 +12,7 @@ export default function AppChrome({
     <div className="min-h-screen bg-paper text-ink">
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
         <BrandMark />
-        {aside}
+        {aside ? <div className="flex items-center gap-3">{aside}</div> : null}
       </header>
       {children}
     </div>

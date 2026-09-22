@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Instrument_Serif } from "next/font/google";
 import I18nProvider from "@/components/I18nProvider";
+import ThemeToggle from "@/components/ThemeToggle";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -46,9 +47,18 @@ export default function RootLayout({
     <html lang="en" className={`${figtree.variable} ${instrument.variable}`}>
       <head>
         <link rel="stylesheet" href="/sampark.css" />
+        {/* Runs synchronously before first paint — no flash of wrong theme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('setu:theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t)}}catch(e){}})()`,
+          }}
+        />
       </head>
       <body className="min-h-screen overflow-x-hidden bg-paper font-sans text-ink antialiased">
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          {children}
+          <ThemeToggle />
+        </I18nProvider>
       </body>
     </html>
   );

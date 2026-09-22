@@ -5,8 +5,10 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  // Use the OS-level prefers-color-scheme signal — no JS toggle needed.
-  darkMode: "media",
+  // Selector strategy: dark tokens activate when <html data-theme="dark">.
+  // The theme script in layout.tsx sets this before first paint (no flash).
+  // Falls back to OS preference when no data-theme is stored.
+  darkMode: ["selector", '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
